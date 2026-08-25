@@ -21,6 +21,10 @@ async function handleLogout() {
       <li>companyId: {{ auth.user?.companyId }}</li>
       <li>role: {{ auth.user?.role }}</li>
     </ul>
+    <nav>
+      <RouterLink to="/mypage">내 정보</RouterLink>
+      <RouterLink v-if="auth.user?.role === 'ADMIN'" to="/admin/members">회원 관리</RouterLink>
+    </nav>
     <button @click="handleLogout">로그아웃</button>
   </div>
 </template>
@@ -31,6 +35,10 @@ async function handleLogout() {
   margin: 80px auto;
   display: flex;
   flex-direction: column;
+  gap: 12px;
+}
+nav {
+  display: flex;
   gap: 12px;
 }
 </style>

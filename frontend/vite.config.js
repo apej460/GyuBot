@@ -17,9 +17,13 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      // auth-service로 직접 프록시. api-gateway 라우팅이 갖춰지면 타겟을 바꾸면 됨.
-      '/api': {
+      // 각 서비스로 직접 프록시. api-gateway 라우팅이 갖춰지면 하나의 타겟으로 합치면 됨.
+      '/api/auth': {
         target: 'http://localhost:8081',
+        changeOrigin: true,
+      },
+      '/api/users': {
+        target: 'http://localhost:8082',
         changeOrigin: true,
       },
     },

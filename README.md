@@ -59,13 +59,19 @@ Mailpit(수신 메일 확인용 SMTP 캐처): http://localhost:8025
 - 이메일/OTP는 로컬에서 Mailpit(http://localhost:8025)으로 실제 수신됩니다.
 - 검증 완료(2026-08-25): employee 즉시 로그인 → `/check` 정상, admin 로그인 → OTP 메일 수신 → 인증 → 토큰 발급, OTP 재사용 차단, 잘못된 비밀번호 401, refresh 토큰 회전, logout 후 재요청 차단까지 전부 실제 인프라에 대해 curl로 확인.
 
-## frontend 로그인 화면
+## frontend 화면
 
-`/login`(이메일/PW → 관리자면 OTP 입력 단계로 전환)과 `/`(로그인 정보 표시 + 로그아웃, `meta.requiresAuth`로 라우터 가드 보호)를 붙였습니다. 개발 서버는 `vite.config.js`의 `server.proxy`로 `/api/*` 요청을 `http://localhost:8081`(auth-service)로 그대로 넘겨서, CORS 설정 없이도 브라우저에서 httpOnly 쿠키가 자연스럽게 동작합니다 (나중에 api-gateway로 라우팅을 옮길 때는 프록시 타겟만 바꾸면 됨).
+- `/login` — 이메일/PW, 관리자면 OTP 입력 단계로 전환
+- `/` — 로그인 정보 표시, 내 정보·회원 관리(관리자만) 링크, 로그아웃 (`meta.requiresAuth`)
+- `/mypage` — 내 정보 조회 + 비밀번호 변경 (`meta.requiresAuth`)
+- `/admin/members` — 회원 목록 + 상태 변경(정지/활성화) 버튼, 관리자만 (`meta.requiresAuth`, `meta.requiresAdmin` — 라우터 가드에서 `auth.user.role !== 'ADMIN'`이면 홈으로 리다이렉트, 백엔드도 동일하게 403으로 막으므로 이중 방어)
 
-- 상태 관리: `src/stores/auth.js` (Pinia) — `login`, `verifyOtp`, `checkAuth`, `logout`
+개발 서버는 `vite.config.js`의 `server.proxy`로 `/api/auth/*`는 auth-service(:8081), `/api/users/*`는 user-service(:8082)로 각각 프록시합니다. 두 서비스 모두 `/api/...` 프리픽스를 쓰기 때문에 하나의 프록시 규칙으로 묶을 수 없어서 경로별로 나눴습니다 (api-gateway 라우팅이 갖춰지면 하나의 타겟으로 합치면 됨). 쿠키는 Vite가 프록시해주는 덕에 브라우저 입장에서는 항상 동일 출처(localhost:5173)라서 CORS 설정이 필요 없습니다.
+
+- 상태 관리: `src/stores/auth.js`(로그인 세션) / `src/stores/member.js`(프로필·회원 관리, user-service 담당)
 - API 클라이언트: `src/api/http.js` (axios, `withCredentials: true`)
-- 검증 완료(2026-08-25, 실제 Chrome 브라우저로 확인): employee 로그인 → 홈 화면에 사용자 정보 표시 → 새로고침해도 세션 유지 → 로그아웃 → admin 로그인 → OTP 입력 화면 전환 → Mailpit에서 실제 수신한 인증번호 입력 → 인증 후 role=ADMIN으로 홈 화면 진입까지 전부 확인. 콘솔 에러 없음.
+- 검증 완료(2026-08-25, 실제 Chrome 브라우저로 확인 — claude-in-chrome): employee 로그인 → 홈 화면 정보 표시 → 새로고침해도 세션 유지 → 로그아웃 → admin 로그인 → OTP 입력 화면 전환 → Mailpit에서 실제 수신한 인증번호 입력 → role=ADMIN으로 홈 진입 → 내 정보 화면에서 잘못된 현재 비밀번호로 변경 시도 시 에러 표시 → 올바른 비밀번호로 변경 성공 표시 후 원래 비밀번호로 재변경까지 실제 폼 입력으로 확인 → 회원 관리 화면에서 상태 뱃지·버튼으로 정지/활성화 토글 확인 → employee 계정으로는 회원 관리 링크가 아예 안 보이고 URL 직접 접근 시에도 홈으로 리다이렉트되는 것까지 확인. 콘솔 에러 없음.
+- 브라우저 자동화 테스트 팁: 이 앱을 claude-in-chrome으로 조작할 때 픽셀 좌표 클릭은 HiDPI 스크린샷 배율 때문에 가끔 엉뚱한 곳을 클릭합니다(입력 필드가 안 채워지거나 클릭이 씹힘) — `read_page`로 얻은 요소 ref로 클릭·입력하는 편이 훨씬 안정적입니다.
 
 ## user-service 참고
 
