@@ -69,6 +69,8 @@ Mailpit(수신 메일 확인용 SMTP 캐처): http://localhost:8025
 ## user-service 참고
 
 - 포트 8082. 자기 전용 DB(`gyubot_user`)를 씀 — auth-service와 DB를 공유하지 않는 database-per-service 구조.
-- 현재는 discovery-service/api-gateway와 같은 수준의 순수 스캐폴드 상태(의존성 + `application.yml` + 부팅 확인만) — 컨트롤러·엔티티는 아직 없음. `app.jwt.secret`/`issuer`를 auth-service와 **동일한 값**으로 맞춰뒀는데, 이건 user-service가 토큰을 발급하는 게 아니라 auth-service가 발급한 JWT를 검증만 하기 위함 (다음 단계에서 JwtAuthenticationFilter를 auth-service와 같은 방식으로 붙일 예정).
-- 목표 기능(설계 발표자료 기준): 마이페이지(계정 정보·비밀번호 변경), 관리자용 회원 관리(가입 승인/반려 — 명함·재직증명서 업로드 포함, 회원 상태 관리). 승인/반려 메일 발송을 위해 `spring-boot-starter-mail`을 이미 포함해둠.
-- 검증 완료(2026-08-25): `/actuator/health`에서 db(gyubot_user)·mail UP 확인, discovery-service 기동 후 Eureka에 `USER-SERVICE`로 정상 등록 확인.
+- 마이페이지 조회 + 관리자용 회원 관리 구현 완료. auth-service가 발급한 JWT를 **검증만** 하고(같은 `app.jwt.secret`/`issuer` 공유), 직접 토큰을 발급하지는 않습니다.
+- API: `GET /api/users/me`(본인 정보, 임직원/관리자 공통) · `GET /api/users`(회사 소속 전체 목록, 관리자 전용, 테넌트 격리) · `GET /api/users/{id}`(상세, 관리자 전용) · `PATCH /api/users/{id}/status`(ACTIVE/SUSPENDED 변경, 관리자 전용).
+- 범위에서 제외한 것: **비밀번호 변경**과 **가입 승인(명함·재직증명서 업로드)**. 둘 다 실제 로그인 자격정보(auth-service의 `auth_user`)를 건드려야 해서, user-service 단독이 아니라 서비스 간 연동(내부 API 또는 이벤트)이 필요합니다 — 다음 단계로 남겨둠.
+- `DevDataSeeder`가 auth-service와 **같은 id**(employee=1, admin=2)로 `member_profile`을 시드합니다. 실제로는 가입 승인 때 두 서비스의 계정이 함께 생겨야 하는데 그 연동이 없어서, 로컬 개발 편의상 여기서도 동일 계정을 직접 시드해 둔 것입니다.
+- 검증 완료(2026-08-25): employee로 로그인해 `/api/users/me` 확인, 관리자 전용 API 호출 시 403 확인, admin으로 OTP 인증 후 회원 목록/상세 조회, 상태를 SUSPENDED로 변경 후 재조회로 반영 확인, 존재하지 않는 id 조회 시 404 확인 — 전부 실제 인프라(auth-service 로그인 → user-service API)에 대해 curl로 확인.
