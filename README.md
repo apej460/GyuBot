@@ -55,3 +55,11 @@ Mailpit(수신 메일 확인용 SMTP 캐처): http://localhost:8025
 - 로컬 테스트 계정은 `DevDataSeeder`가 최초 기동 시 자동 생성합니다 (`employee@gyubot.local` / `admin@gyubot.local`, 비밀번호 `Passw0rd!`, company_id=1). 실제 회원가입/승인 플로우는 user-service 몫이라 auth-service에는 별도 가입 API가 없습니다 — 이건 로컬 개발/테스트 전용 시드 데이터입니다.
 - 이메일/OTP는 로컬에서 Mailpit(http://localhost:8025)으로 실제 수신됩니다.
 - 검증 완료(2026-08-25): employee 즉시 로그인 → `/check` 정상, admin 로그인 → OTP 메일 수신 → 인증 → 토큰 발급, OTP 재사용 차단, 잘못된 비밀번호 401, refresh 토큰 회전, logout 후 재요청 차단까지 전부 실제 인프라에 대해 curl로 확인.
+
+## frontend 로그인 화면
+
+`/login`(이메일/PW → 관리자면 OTP 입력 단계로 전환)과 `/`(로그인 정보 표시 + 로그아웃, `meta.requiresAuth`로 라우터 가드 보호)를 붙였습니다. 개발 서버는 `vite.config.js`의 `server.proxy`로 `/api/*` 요청을 `http://localhost:8081`(auth-service)로 그대로 넘겨서, CORS 설정 없이도 브라우저에서 httpOnly 쿠키가 자연스럽게 동작합니다 (나중에 api-gateway로 라우팅을 옮길 때는 프록시 타겟만 바꾸면 됨).
+
+- 상태 관리: `src/stores/auth.js` (Pinia) — `login`, `verifyOtp`, `checkAuth`, `logout`
+- API 클라이언트: `src/api/http.js` (axios, `withCredentials: true`)
+- 검증 완료(2026-08-25, 실제 Chrome 브라우저로 확인): employee 로그인 → 홈 화면에 사용자 정보 표시 → 새로고침해도 세션 유지 → 로그아웃 → admin 로그인 → OTP 입력 화면 전환 → Mailpit에서 실제 수신한 인증번호 입력 → 인증 후 role=ADMIN으로 홈 화면 진입까지 전부 확인. 콘솔 에러 없음.
