@@ -1,0 +1,43 @@
+spring:
+  application:
+    name: document-service
+  datasource:
+    url: ${DB_URL:jdbc:mariadb://localhost:3306/gyubot_document}
+    username: ${DB_USER:root}
+    password: ${DB_PASSWORD:root}
+    driver-class-name: org.mariadb.jdbc.Driver
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+
+server:
+  port: 8083
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_URL:http://localhost:8761/eureka/}
+
+# auth-service가 발급한 JWT를 검증만 하기 위한 값 (토큰 발급은 하지 않음).
+# 두 서비스가 반드시 같은 secret/issuer를 공유해야 함.
+app:
+  jwt:
+    secret: ${JWT_SECRET:change-this-development-secret-key-at-least-32-characters}
+    issuer: ${JWT_ISSUER:gyubot-auth-service}
+  kafka:
+    document-uploaded-topic: ${DOCUMENT_UPLOADED_TOPIC:document.uploaded}
+  s3:
+    # 실제 AWS 자격 증명/LocalStack 연동은 다음 단계(업로드 구현)에서 붙인다.
+    bucket: ${S3_BUCKET:gyubot-documents}
+    region: ${AWS_REGION:ap-northeast-2}

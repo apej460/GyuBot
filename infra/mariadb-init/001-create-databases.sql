@@ -3,3 +3,4 @@
 -- 이미 떠 있는 로컬 컨테이너에는 수동으로 CREATE DATABASE를 실행해야 한다.
 CREATE DATABASE IF NOT EXISTS gyubot_auth;
 CREATE DATABASE IF NOT EXISTS gyubot_user;
+CREATE DATABASE IF NOT EXISTS gyubot_document;

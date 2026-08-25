@@ -33,5 +33,24 @@ services:
       - "1025:1025" # SMTP - auth-service가 여기로 OTP 메일 발송
       - "8025:8025" # 웹 UI - http://localhost:8025 에서 수신 메일 확인
 
+  kafka:
+    image: apache/kafka:latest
+    container_name: gyubot-kafka
+    ports:
+      - "9092:9092"
+    environment:
+      # KRaft 단일 노드 모드 (Zookeeper 없이) - document-service가 document.uploaded 이벤트를 발행하고
+      # search-service가 비동기로 구독해 Chunking/색인을 수행하는 구조의 기반.
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+
 volumes:
   mariadb-data:

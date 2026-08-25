@@ -14,7 +14,7 @@ GyuBot/
 │   ├── api-gateway/       Spring Cloud Gateway — 단일 진입점 (:8080)
 │   ├── auth-service/      로그인·JWT·OTP (:8081)
 │   ├── user-service/      회원·마이페이지 (:8082)
-│   ├── document-service/  (예정) 업로드·S3 저장
+│   ├── document-service/  업로드·S3 저장 (:8083)
 │   ├── search-service/    (예정) Chunking·벡터검색
 │   └── chat-service/      (예정) RAG 대화 처리
 ├── infra/                 로컬 실행용 docker-compose (Kafka, Redis, DB 등)
@@ -24,7 +24,7 @@ GyuBot/
 ## 로컬 실행
 
 ```bash
-# 0. 인프라 먼저 기동 (MariaDB, Redis, Mailpit)
+# 0. 인프라 먼저 기동 (MariaDB, Redis, Mailpit, Kafka)
 cd infra && docker compose up -d
 
 # 1. Eureka
@@ -45,9 +45,9 @@ Mailpit(수신 메일 확인용 SMTP 캐처): http://localhost:8025
 
 ## infra/
 
-`docker-compose.yml` 하나로 로컬 개발용 MariaDB(:3306, root/root), Redis(:6379), Mailpit(SMTP :1025 / 웹 UI :8025)을 띄웁니다. 각 서비스의 `application.yml` 기본값이 이 구성과 그대로 맞게 되어 있어 별도 환경변수 설정 없이 바로 연결됩니다.
+`docker-compose.yml` 하나로 로컬 개발용 MariaDB(:3306, root/root), Redis(:6379), Mailpit(SMTP :1025 / 웹 UI :8025), Kafka(:9092, KRaft 단일 노드, Zookeeper 없음)를 띄웁니다. 각 서비스의 `application.yml` 기본값이 이 구성과 그대로 맞게 되어 있어 별도 환경변수 설정 없이 바로 연결됩니다.
 
-서비스마다 자기 DB를 따로 쓰는 database-per-service 구조라, `mariadb-init/001-create-databases.sql`이 컨테이너 최초 생성 시 `gyubot_auth`·`gyubot_user`를 함께 만듭니다. 이미 떠 있는 컨테이너에 새 서비스용 DB를 추가할 땐 init 스크립트가 다시 실행되지 않으니 `docker exec gyubot-mariadb mariadb -uroot -proot -e "CREATE DATABASE IF NOT EXISTS <db명>;"`로 수동 생성하고, 스크립트에도 같이 추가해 둘 것.
+서비스마다 자기 DB를 따로 쓰는 database-per-service 구조라, `mariadb-init/001-create-databases.sql`이 컨테이너 최초 생성 시 `gyubot_auth`·`gyubot_user`·`gyubot_document`를 함께 만듭니다. 이미 떠 있는 컨테이너에 새 서비스용 DB를 추가할 땐 init 스크립트가 다시 실행되지 않으니 `docker exec gyubot-mariadb mariadb -uroot -proot -e "CREATE DATABASE IF NOT EXISTS <db명>;"`로 수동 생성하고, 스크립트에도 같이 추가해 둘 것.
 
 ## auth-service 참고
 
@@ -84,6 +84,15 @@ Mailpit(수신 메일 확인용 SMTP 캐처): http://localhost:8025
 - **서비스 간 연동으로 구현한 비밀번호 변경**: 실제 로그인 자격정보(`auth_user`)는 auth-service DB에만 있어서, user-service는 JWT로 본인 확인만 하고 실제 변경은 `AuthServiceClient`가 Eureka(`DiscoveryClient`)로 auth-service 인스턴스를 찾아 `PATCH /internal/auth-users/{id}/password`를 직접 호출하는 방식으로 위임합니다. (`@LoadBalanced RestClient.Builder` 빈으로 시도했다가, Eureka 클라이언트 자신의 내부 HTTP 호출까지 로드밸런서를 타면서 아직 뜨지 않은 자신을 discover하려는 순환 참조로 부팅이 실패해 — `DiscoveryClient`로 인스턴스를 직접 조회하는 방식으로 바꿨습니다.)
 - `DevDataSeeder`가 auth-service와 **같은 id**(employee=1, admin=2)로 `member_profile`을 시드합니다. 실제 가입 승인 흐름과 별개로, 로컬 개발 편의상 여기서도 동일 계정을 직접 시드해 둔 것입니다.
 - 검증 완료(2026-08-25): employee로 로그인해 `/api/users/me` 확인, 관리자 전용 API 호출 시 403 확인, admin으로 OTP 인증 후 회원 목록/상세 조회, 상태를 SUSPENDED로 변경 후 재조회로 반영 확인, 존재하지 않는 id 조회 시 404 확인, 잘못된 현재 비밀번호로 변경 시도 시 401, 올바른 현재 비밀번호로 변경 후 새 비밀번호로 실제 로그인 성공(구 비밀번호는 실패) 및 원복까지 확인, 내부 API에 잘못된/누락된 토큰으로 직접 호출 시 각각 403/400으로 거부되는 것도 확인 — 전부 실제 인프라에 대해 curl로 확인.
+
+## document-service 참고
+
+- 포트 8083. 자기 전용 DB(`gyubot_document`)를 씀 — database-per-service 구조.
+- 현재는 discovery-service/api-gateway와 같은 수준의 순수 스캐폴드 상태(의존성 + `application.yml` + 부팅 확인만) — 업로드 컨트롤러·엔티티·S3 연동·Kafka 발행 로직은 아직 없음.
+- 의존성은 미리 넣어뒀습니다: `software.amazon.awssdk:s3`(원본 파일 저장), `spring-boot-starter-kafka`(문서 업로드 완료 시 `document.uploaded` 이벤트 발행 — search-service가 이 이벤트를 구독해 비동기로 Chunking·색인을 수행하는 구조), auth-service가 발급한 JWT를 검증하기 위한 `app.jwt.secret`/`issuer`(user-service와 동일한 값).
+- **Spring Boot 4.1부터 Kafka `HealthIndicator`가 기본 제공되지 않습니다** (매 헬스체크마다 `describeCluster()`를 호출하는 비용 때문에 액추에이터 기본에서 빠짐) — 다른 서비스들처럼 `/actuator/health`에서 실제 연결 상태를 바로 볼 수 있게 `health/KafkaHealthIndicator.java`를 직접 추가했습니다.
+- Boot 4.1에서 Health/HealthIndicator 클래스의 패키지가 `org.springframework.boot.actuate.health`에서 `org.springframework.boot.health.contributor`로 이동했습니다 (별도 `spring-boot-health` 모듈로 분리됨) — 옛 패키지로 import하면 컴파일 에러가 납니다.
+- 검증 완료(2026-08-25): `/actuator/health`에서 db(gyubot_document)·kafka·Eureka 전부 UP 확인, discovery-service에 `DOCUMENT-SERVICE`로 정상 등록 확인. S3는 실제 AWS 자격 증명이나 LocalStack이 없어 아직 연결 확인 전 — 업로드 구현 단계에서 붙일 예정.
 
 ## 가입 승인 플로우 (예외 가입)
 
