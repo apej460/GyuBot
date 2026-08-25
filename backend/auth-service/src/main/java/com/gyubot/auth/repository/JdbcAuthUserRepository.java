@@ -60,6 +60,14 @@ public class JdbcAuthUserRepository implements AuthUserRepository {
         return new AuthUser(key == null ? null : key.longValue(), companyId, email, encodedPassword, name, role, true);
     }
 
+    @Override
+    public void updatePassword(Long id, String encodedPassword) {
+        jdbcTemplate.update(
+                "UPDATE auth_user SET password = ? WHERE id = ?",
+                encodedPassword, id
+        );
+    }
+
     private AuthUser mapRow(ResultSet rs, int rowNum) throws SQLException {
         return new AuthUser(
                 rs.getLong("id"),

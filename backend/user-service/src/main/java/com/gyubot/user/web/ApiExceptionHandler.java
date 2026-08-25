@@ -1,6 +1,7 @@
 package com.gyubot.user.web;
 
 import com.gyubot.user.exception.MemberNotFoundException;
+import com.gyubot.user.exception.PasswordChangeException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -16,6 +17,12 @@ public class ApiExceptionHandler {
     ResponseEntity<Map<String, String>> notFound(MemberNotFoundException e) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(Map.of("code", "MEMBER_NOT_FOUND", "message", e.getMessage()));
+    }
+
+    @ExceptionHandler(PasswordChangeException.class)
+    ResponseEntity<Map<String, String>> passwordChangeFailed(PasswordChangeException e) {
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(Map.of("code", "PASSWORD_CHANGE_FAILED", "message", e.getMessage()));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

@@ -37,4 +37,13 @@ public class AuthService {
     public AuthUser requireById(Long id) {
         return authUserRepository.findById(id).orElseThrow(InvalidCredentialsException::new);
     }
+
+    @Transactional
+    public void changePassword(Long userId, String currentPassword, String newPassword) {
+        AuthUser user = requireById(userId);
+        if (!passwordEncoder.matches(currentPassword, user.password())) {
+            throw new InvalidCredentialsException();
+        }
+        authUserRepository.updatePassword(userId, passwordEncoder.encode(newPassword));
+    }
 }

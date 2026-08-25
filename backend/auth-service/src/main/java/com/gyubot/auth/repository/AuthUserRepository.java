@@ -11,4 +11,6 @@ public interface AuthUserRepository {
     Optional<AuthUser> findById(Long id);
 
     AuthUser save(Long companyId, String email, String encodedPassword, String name, Role role);
+
+    void updatePassword(Long id, String encodedPassword);
 }

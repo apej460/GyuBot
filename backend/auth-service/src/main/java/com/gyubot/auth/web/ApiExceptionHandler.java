@@ -1,5 +1,6 @@
 package com.gyubot.auth.web;
 
+import com.gyubot.auth.exception.InternalAuthException;
 import com.gyubot.auth.exception.InvalidCredentialsException;
 import com.gyubot.auth.exception.OtpVerificationException;
 import org.springframework.http.HttpStatus;
@@ -23,6 +24,12 @@ public class ApiExceptionHandler {
     ResponseEntity<Map<String, String>> otpFailed(OtpVerificationException e) {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                 .body(Map.of("code", "OTP_VERIFICATION_FAILED", "message", e.getMessage()));
+    }
+
+    @ExceptionHandler(InternalAuthException.class)
+    ResponseEntity<Map<String, String>> internalAuth(InternalAuthException e) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(Map.of("code", "INTERNAL_AUTH_FAILED", "message", e.getMessage()));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

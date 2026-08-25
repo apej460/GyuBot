@@ -31,6 +31,7 @@ public class SecurityConfig {
                                 "/api/auth/login",
                                 "/api/auth/otp/verify",
                                 "/api/auth/refresh",
+                                "/internal/**",
                                 "/actuator/**",
                                 "/error",
                                 "/swagger-ui/**",
