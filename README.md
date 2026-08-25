@@ -15,7 +15,7 @@ GyuBot/
 │   ├── auth-service/      로그인·JWT·OTP (:8081)
 │   ├── user-service/      회원·마이페이지 (:8082)
 │   ├── document-service/  업로드·S3 저장 (:8083)
-│   ├── search-service/    (예정) Chunking·벡터검색
+│   ├── search-service/    Chunking·하이브리드 검색 (:8084)
 │   └── chat-service/      (예정) RAG 대화 처리
 ├── infra/                 로컬 실행용 docker-compose (Kafka, Redis, DB 등)
 └── docs/                  설계 발표자료, 요구사항정의서 등
@@ -24,7 +24,7 @@ GyuBot/
 ## 로컬 실행
 
 ```bash
-# 0. 인프라 먼저 기동 (MariaDB, Redis, Mailpit, Kafka, MinIO)
+# 0. 인프라 먼저 기동 (MariaDB, Redis, Mailpit, Kafka, MinIO, Elasticsearch)
 cd infra && docker compose up -d
 
 # 1. Eureka
@@ -45,7 +45,7 @@ Mailpit(수신 메일 확인용 SMTP 캐처): http://localhost:8025
 
 ## infra/
 
-`docker-compose.yml` 하나로 로컬 개발용 MariaDB(:3306, root/root), Redis(:6379), Mailpit(SMTP :1025 / 웹 UI :8025), Kafka(:9092, KRaft 단일 노드, Zookeeper 없음), MinIO(S3 호환 스토리지, API :9100 / 콘솔 :9101, minioadmin/minioadmin)를 띄웁니다. 각 서비스의 `application.yml` 기본값이 이 구성과 그대로 맞게 되어 있어 별도 환경변수 설정 없이 바로 연결됩니다.
+`docker-compose.yml` 하나로 로컬 개발용 MariaDB(:3306, root/root), Redis(:6379), Mailpit(SMTP :1025 / 웹 UI :8025), Kafka(:9092, KRaft 단일 노드, Zookeeper 없음), MinIO(S3 호환 스토리지, API :9100 / 콘솔 :9101, minioadmin/minioadmin), Elasticsearch(:9200, 단일 노드, `xpack.security.enabled=false`로 로컬 전용 무인증 — 운영에서는 반드시 인증을 켜야 함)를 띄웁니다. 각 서비스의 `application.yml` 기본값이 이 구성과 그대로 맞게 되어 있어 별도 환경변수 설정 없이 바로 연결됩니다.
 
 MinIO 포트가 9000/9001이 아니라 9100/9101인 이유: 로컬에 Jupyter 커널이 떠 있으면 ZMQ 통신 채널 5개(shell/iopub/stdin/control/hb)가 9000~9004 포트를 통째로 점유합니다. 이 충돌 상태에서도 curl 요청은 그럴듯한 응답을 받아 정상처럼 보이지만, AWS SDK 클라이언트는 요청이 무한 대기하다 타임아웃됩니다 — 원인을 못 찾겠다면 `lsof -i -P -n -a -p <pid>`로 포트 점유 프로세스부터 확인할 것.
 
@@ -96,6 +96,14 @@ MinIO 포트가 9000/9001이 아니라 9100/9101인 이유: 로컬에 Jupyter �
 - Spring Boot 4.1 관련 메모 두 가지: (1) Kafka `HealthIndicator`가 더 이상 기본 제공되지 않아(매 헬스체크마다 `describeCluster()` 호출 비용 때문) `health/KafkaHealthIndicator.java`를 직접 추가했습니다. (2) `Health`/`HealthIndicator` 클래스가 `org.springframework.boot.actuate.health`에서 `org.springframework.boot.health.contributor`(신설된 `spring-boot-health` 모듈)로 이동했습니다 — 옛 패키지로 import하면 컴파일 에러.
 - **가장 오래 걸린 삽질**: MinIO에 대한 모든 S3 요청이 AWS SDK for Java v2에서만 무한 대기하다 타임아웃되는 문제가 있었습니다(curl·AWS CLI·Python botocore는 전부 즉시 성공). MinIO 버전 문제(체크섬/청크 인코딩), IPv4/IPv6, HTTP 클라이언트 구현체(Apache vs `UrlConnectionHttpClient`) 순으로 의심하고 다 시도해봤지만 전부 아니었고, `lsof -i -P -n -a -p <pid>`로 확인해보니 **로컬에 떠 있던 Jupyter 커널이 ZMQ 채널 5개로 9000~9004 포트를 통째로 점유**하고 있어서 MinIO의 Docker 포트 매핑과 충돌한 것이었습니다. curl은 어느 프로세스가 응답하든 그럴듯한 응답이면 넘어가서 문제를 못 느꼈던 것. MinIO를 9100/9101로 옮겨서 해결했습니다 — 로컬에서 이 서비스를 실행할 때 9000번대 포트가 이미 쓰이고 있다면 먼저 의심할 것.
 - 검증 완료(2026-08-25): 실제 PDF 업로드 → S3에 저장되고 DB에 메타데이터 기록 → `document.uploaded` 이벤트를 Kafka에서 직접 consume해 페이로드 확인 → 목록/상세 조회 → 다운로드한 파일이 원본과 바이트 단위로 동일함 확인 → 제목 수정 → 허용 안 되는 파일 형식(txt) 업로드 시 400 → 삭제 후 목록에서 사라지고 상세 조회 404, S3 오브젝트도 실제로 삭제됨, `document.deleted` 이벤트 발행 확인 → 일반 직원 계정으로 접근 시 403 — 전부 실제 인프라(MariaDB+Kafka+MinIO)에 대해 curl과 AWS CLI로 확인.
+
+## search-service 참고
+
+- 포트 8084. 현재는 discovery-service/api-gateway와 같은 깊이의 스캐폴드 상태(의존성 + `application.yml` + 부팅/연결 확인만) — document-service가 발행하는 `document.uploaded`/`document.deleted`를 구독해 Chunking·색인하는 로직, 하이브리드 검색 API는 아직 없습니다.
+- **벡터 검색 스택 결정**: 발표자료엔 "Vector DB & ES"로 두 개의 박스로 그려져 있지만, 로컬 개발 편의와 인프라 단순화를 위해 **Elasticsearch 하나로 통합**하기로 했습니다. ES 8.x가 `dense_vector` 필드(kNN 벡터 검색)와 BM25(키워드 검색)를 동시에 지원해서, 별도 벡터 DB(Milvus/Qdrant 등) 없이 인덱스 하나에서 하이브리드 검색을 구현할 수 있습니다. 별도 벡터 DB를 두는 구성보다 로컬 인프라 컨테이너 수가 줄고 운영 포인트도 하나로 줄어드는 게 이 선택의 이유입니다.
+- 의존성은 Spring Boot 자체 `spring-boot-starter-elasticsearch`(co.elastic.clients 기반 `ElasticsearchClient` 빈을 자동 구성 — Spring Data의 리포지토리 추상화는 쓰지 않음, 나중에 kNN+BM25를 섞은 커스텀 쿼리를 직접 짜야 해서 저수준 클라이언트가 더 맞음)와 `spring-boot-starter-kafka`(향후 `document.uploaded`/`document.deleted` 구독용)를 넣어뒀습니다. DB(JDBC) 의존성은 아직 없습니다 — 청크 텍스트와 벡터를 전부 ES 인덱스 문서 자체에 저장하는 구조라 별도 관계형 테이블이 당장은 필요 없기 때문입니다 (나중에 색인 상태 추적 등이 필요해지면 추가 검토).
+- Elasticsearch는 **Boot가 헬스 인디케이터를 기본 제공**합니다 (document-service의 Kafka와 달리 별도로 만들 필요 없었음 — `/actuator/health`에 바로 `elasticsearch` 컴포넌트가 잡힘). Kafka는 여전히 Boot 4.1에서 기본 제공되지 않아 `health/KafkaHealthIndicator.java`를 document-service와 동일하게 추가했습니다.
+- 검증 완료(2026-08-26): `/actuator/health`에서 kafka·elasticsearch(`status: green`)·Eureka 전부 UP 확인, discovery-service에 `SEARCH-SERVICE`로 정상 등록 확인 — 전부 실제로 띄운 로컬 Kafka/Elasticsearch 컨테이너에 대해 curl로 확인.
 
 ## 가입 승인 플로우 (예외 가입)
 

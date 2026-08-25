@@ -75,6 +75,25 @@ services:
       timeout: 5s
       retries: 10
 
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.15.0
+    container_name: gyubot-elasticsearch
+    environment:
+      discovery.type: single-node
+      # 로컬 개발 전용 — 인증서/비밀번호 없이 바로 붙게 보안을 끈다. 운영에서는 절대 이렇게 두면 안 됨.
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: "-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200" # REST API - search-service가 하이브리드(벡터+키워드) 색인/검색에 사용
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
 volumes:
   mariadb-data:
   minio-data:
+  elasticsearch-data:
