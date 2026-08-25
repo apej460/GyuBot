@@ -1,0 +1,38 @@
+spring:
+  application:
+    name: search-service
+  elasticsearch:
+    uris: ${ELASTICSEARCH_URIS:http://localhost:9200}
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: search-service
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: com.gyubot.search.event
+
+server:
+  port: 8084
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_URL:http://localhost:8761/eureka/}
+
+app:
+  kafka:
+    document-uploaded-topic: ${DOCUMENT_UPLOADED_TOPIC:document.uploaded}
+    document-deleted-topic: ${DOCUMENT_DELETED_TOPIC:document.deleted}
+  elasticsearch:
+    # 하이브리드(벡터+키워드) 검색 대상 색인. dense_vector + BM25 필드를 함께 갖는 매핑을 이 인덱스에 만든다.
+    document-chunk-index: ${DOCUMENT_CHUNK_INDEX:document-chunks}
