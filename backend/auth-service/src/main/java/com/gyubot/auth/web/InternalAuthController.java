@@ -1,12 +1,16 @@
 package com.gyubot.auth.web;
 
+import com.gyubot.auth.domain.AuthUser;
 import com.gyubot.auth.exception.InternalAuthException;
 import com.gyubot.auth.service.AuthService;
 import com.gyubot.auth.web.dto.ChangePasswordRequest;
+import com.gyubot.auth.web.dto.CreateAuthUserRequest;
+import com.gyubot.auth.web.dto.CreateAuthUserResponse;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -26,6 +30,22 @@ public class InternalAuthController {
     public InternalAuthController(AuthService authService, @Value("${app.internal.token}") String internalToken) {
         this.authService = authService;
         this.internalToken = internalToken;
+    }
+
+    /*
+     * user-service의 가입 승인 처리에서만 호출한다 (신규 로그인 계정 생성).
+     */
+    @PostMapping
+    public CreateAuthUserResponse createUser(
+            @Valid @RequestBody CreateAuthUserRequest request,
+            @RequestHeader("X-Internal-Token") String token) {
+
+        if (!internalToken.equals(token)) {
+            throw new InternalAuthException();
+        }
+        AuthUser user = authService.createUser(
+                request.companyId(), request.email(), request.encodedPassword(), request.name(), request.role());
+        return new CreateAuthUserResponse(user.id());
     }
 
     @PatchMapping("/{id}/password")

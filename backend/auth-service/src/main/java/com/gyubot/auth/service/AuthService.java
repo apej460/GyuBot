@@ -1,6 +1,8 @@
 package com.gyubot.auth.service;
 
 import com.gyubot.auth.domain.AuthUser;
+import com.gyubot.auth.domain.Role;
+import com.gyubot.auth.exception.DuplicateEmailException;
 import com.gyubot.auth.exception.InvalidCredentialsException;
 import com.gyubot.auth.repository.AuthUserRepository;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -45,5 +47,16 @@ public class AuthService {
             throw new InvalidCredentialsException();
         }
         authUserRepository.updatePassword(userId, passwordEncoder.encode(newPassword));
+    }
+
+    /*
+     * user-service의 가입 승인 처리 전용. encodedPassword는 이미 해시된 값이므로 그대로 저장한다.
+     */
+    @Transactional
+    public AuthUser createUser(Long companyId, String email, String encodedPassword, String name, Role role) {
+        authUserRepository.findByEmail(email).ifPresent(user -> {
+            throw new DuplicateEmailException();
+        });
+        return authUserRepository.save(companyId, email, encodedPassword, name, role);
     }
 }

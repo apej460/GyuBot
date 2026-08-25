@@ -1,5 +1,6 @@
 package com.gyubot.auth.web;
 
+import com.gyubot.auth.exception.DuplicateEmailException;
 import com.gyubot.auth.exception.InternalAuthException;
 import com.gyubot.auth.exception.InvalidCredentialsException;
 import com.gyubot.auth.exception.OtpVerificationException;
@@ -24,6 +25,12 @@ public class ApiExceptionHandler {
     ResponseEntity<Map<String, String>> otpFailed(OtpVerificationException e) {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                 .body(Map.of("code", "OTP_VERIFICATION_FAILED", "message", e.getMessage()));
+    }
+
+    @ExceptionHandler(DuplicateEmailException.class)
+    ResponseEntity<Map<String, String>> duplicateEmail(DuplicateEmailException e) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(Map.of("code", "DUPLICATE_EMAIL", "message", e.getMessage()));
     }
 
     @ExceptionHandler(InternalAuthException.class)
