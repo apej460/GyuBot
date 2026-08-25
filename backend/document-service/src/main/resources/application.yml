@@ -11,6 +11,13 @@ spring:
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 50MB
+  sql:
+    init:
+      mode: always
 
 server:
   port: 8083
@@ -37,7 +44,13 @@ app:
     issuer: ${JWT_ISSUER:gyubot-auth-service}
   kafka:
     document-uploaded-topic: ${DOCUMENT_UPLOADED_TOPIC:document.uploaded}
+    document-deleted-topic: ${DOCUMENT_DELETED_TOPIC:document.deleted}
   s3:
-    # 실제 AWS 자격 증명/LocalStack 연동은 다음 단계(업로드 구현)에서 붙인다.
     bucket: ${S3_BUCKET:gyubot-documents}
     region: ${AWS_REGION:ap-northeast-2}
+    # 로컬 개발은 MinIO(S3 호환)를 씀. 실제 AWS로 옮길 땐 endpoint를 비우고
+    # path-style-access도 false로 바꾸면 됨 (AWS는 버킷별 서브도메인 방식을 씀).
+    endpoint: ${S3_ENDPOINT:http://localhost:9100}
+    access-key: ${S3_ACCESS_KEY:minioadmin}
+    secret-key: ${S3_SECRET_KEY:minioadmin}
+    path-style-access: ${S3_PATH_STYLE_ACCESS:true}
