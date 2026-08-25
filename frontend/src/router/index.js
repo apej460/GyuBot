@@ -5,6 +5,7 @@ const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
     { path: '/login', name: 'login', component: () => import('@/views/LoginView.vue') },
+    { path: '/signup', name: 'signup', component: () => import('@/views/SignupView.vue') },
     {
       path: '/',
       name: 'home',
@@ -21,6 +22,12 @@ const router = createRouter({
       path: '/admin/members',
       name: 'admin-members',
       component: () => import('@/views/AdminMembersView.vue'),
+      meta: { requiresAuth: true, requiresAdmin: true },
+    },
+    {
+      path: '/admin/signup-requests',
+      name: 'admin-signup-requests',
+      component: () => import('@/views/AdminSignupRequestsView.vue'),
       meta: { requiresAuth: true, requiresAdmin: true },
     },
   ],

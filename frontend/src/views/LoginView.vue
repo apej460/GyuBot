@@ -65,6 +65,8 @@ async function submitOtp() {
 
     <p v-if="auth.error" class="error">{{ auth.error }}</p>
 
+    <RouterLink v-if="!auth.otpPending" to="/signup">회사 이메일이 없으신가요? 가입 신청하기</RouterLink>
+
     <p class="hint">
       테스트 계정 — 임직원: employee@gyubot.local / Passw0rd!<br />
       관리자: admin@gyubot.local / Passw0rd! (OTP는
