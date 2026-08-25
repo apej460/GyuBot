@@ -4,11 +4,11 @@ services:
     container_name: gyubot-mariadb
     environment:
       MARIADB_ROOT_PASSWORD: root
-      MARIADB_DATABASE: gyubot_auth
     ports:
       - "3306:3306"
     volumes:
       - mariadb-data:/var/lib/mysql
+      - ./mariadb-init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       interval: 5s

@@ -1,0 +1,40 @@
+spring:
+  application:
+    name: user-service
+  datasource:
+    url: ${DB_URL:jdbc:mariadb://localhost:3306/gyubot_user}
+    username: ${DB_USER:root}
+    password: ${DB_PASSWORD:root}
+    driver-class-name: org.mariadb.jdbc.Driver
+  mail:
+    host: ${MAIL_HOST:localhost}
+    port: ${MAIL_PORT:1025}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+  sql:
+    init:
+      mode: always
+
+server:
+  port: 8082
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_URL:http://localhost:8761/eureka/}
+
+# auth-service가 발급한 JWT를 검증만 하기 위한 값 (토큰 발급은 하지 않음).
+# 두 서비스가 반드시 같은 secret/issuer를 공유해야 함.
+app:
+  jwt:
+    secret: ${JWT_SECRET:change-this-development-secret-key-at-least-32-characters}
+    issuer: ${JWT_ISSUER:gyubot-auth-service}

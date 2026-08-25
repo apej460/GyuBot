@@ -13,7 +13,7 @@ GyuBot/
 │   ├── discovery-service/ Eureka Server — 서비스 등록·탐색 (:8761)
 │   ├── api-gateway/       Spring Cloud Gateway — 단일 진입점 (:8080)
 │   ├── auth-service/      로그인·JWT·OTP (:8081)
-│   ├── user-service/      (예정) 회원·마이페이지
+│   ├── user-service/      회원·마이페이지 (:8082)
 │   ├── document-service/  (예정) 업로드·S3 저장
 │   ├── search-service/    (예정) Chunking·벡터검색
 │   └── chat-service/      (예정) RAG 대화 처리
@@ -45,7 +45,9 @@ Mailpit(수신 메일 확인용 SMTP 캐처): http://localhost:8025
 
 ## infra/
 
-`docker-compose.yml` 하나로 로컬 개발용 MariaDB(:3306, db `gyubot_auth`, root/root), Redis(:6379), Mailpit(SMTP :1025 / 웹 UI :8025)을 띄웁니다. 각 서비스의 `application.yml` 기본값이 이 구성과 그대로 맞게 되어 있어 별도 환경변수 설정 없이 바로 연결됩니다.
+`docker-compose.yml` 하나로 로컬 개발용 MariaDB(:3306, root/root), Redis(:6379), Mailpit(SMTP :1025 / 웹 UI :8025)을 띄웁니다. 각 서비스의 `application.yml` 기본값이 이 구성과 그대로 맞게 되어 있어 별도 환경변수 설정 없이 바로 연결됩니다.
+
+서비스마다 자기 DB를 따로 쓰는 database-per-service 구조라, `mariadb-init/001-create-databases.sql`이 컨테이너 최초 생성 시 `gyubot_auth`·`gyubot_user`를 함께 만듭니다. 이미 떠 있는 컨테이너에 새 서비스용 DB를 추가할 땐 init 스크립트가 다시 실행되지 않으니 `docker exec gyubot-mariadb mariadb -uroot -proot -e "CREATE DATABASE IF NOT EXISTS <db명>;"`로 수동 생성하고, 스크립트에도 같이 추가해 둘 것.
 
 ## auth-service 참고
 
@@ -63,3 +65,10 @@ Mailpit(수신 메일 확인용 SMTP 캐처): http://localhost:8025
 - 상태 관리: `src/stores/auth.js` (Pinia) — `login`, `verifyOtp`, `checkAuth`, `logout`
 - API 클라이언트: `src/api/http.js` (axios, `withCredentials: true`)
 - 검증 완료(2026-08-25, 실제 Chrome 브라우저로 확인): employee 로그인 → 홈 화면에 사용자 정보 표시 → 새로고침해도 세션 유지 → 로그아웃 → admin 로그인 → OTP 입력 화면 전환 → Mailpit에서 실제 수신한 인증번호 입력 → 인증 후 role=ADMIN으로 홈 화면 진입까지 전부 확인. 콘솔 에러 없음.
+
+## user-service 참고
+
+- 포트 8082. 자기 전용 DB(`gyubot_user`)를 씀 — auth-service와 DB를 공유하지 않는 database-per-service 구조.
+- 현재는 discovery-service/api-gateway와 같은 수준의 순수 스캐폴드 상태(의존성 + `application.yml` + 부팅 확인만) — 컨트롤러·엔티티는 아직 없음. `app.jwt.secret`/`issuer`를 auth-service와 **동일한 값**으로 맞춰뒀는데, 이건 user-service가 토큰을 발급하는 게 아니라 auth-service가 발급한 JWT를 검증만 하기 위함 (다음 단계에서 JwtAuthenticationFilter를 auth-service와 같은 방식으로 붙일 예정).
+- 목표 기능(설계 발표자료 기준): 마이페이지(계정 정보·비밀번호 변경), 관리자용 회원 관리(가입 승인/반려 — 명함·재직증명서 업로드 포함, 회원 상태 관리). 승인/반려 메일 발송을 위해 `spring-boot-starter-mail`을 이미 포함해둠.
+- 검증 완료(2026-08-25): `/actuator/health`에서 db(gyubot_user)·mail UP 확인, discovery-service 기동 후 Eureka에 `USER-SERVICE`로 정상 등록 확인.
