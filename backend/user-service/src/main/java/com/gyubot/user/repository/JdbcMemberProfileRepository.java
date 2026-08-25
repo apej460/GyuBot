@@ -33,6 +33,15 @@ public class JdbcMemberProfileRepository implements MemberProfileRepository {
     }
 
     @Override
+    public Optional<MemberProfile> findByEmail(String email) {
+        return jdbcTemplate.query(
+                "SELECT " + SELECT_COLUMNS + " FROM member_profile WHERE email = ?",
+                this::mapRow,
+                email
+        ).stream().findFirst();
+    }
+
+    @Override
     public List<MemberProfile> findAllByCompanyId(Long companyId) {
         return jdbcTemplate.query(
                 "SELECT " + SELECT_COLUMNS + " FROM member_profile WHERE company_id = ? ORDER BY id",
@@ -46,6 +55,14 @@ public class JdbcMemberProfileRepository implements MemberProfileRepository {
         jdbcTemplate.update(
                 "UPDATE member_profile SET status = ? WHERE id = ?",
                 status.name(), id
+        );
+    }
+
+    @Override
+    public void insert(Long id, Long companyId, String email, String name, Role role, MemberStatus status) {
+        jdbcTemplate.update(
+                "INSERT INTO member_profile(id, company_id, email, name, role, status) VALUES (?, ?, ?, ?, ?, ?)",
+                id, companyId, email, name, role.name(), status.name()
         );
     }
 

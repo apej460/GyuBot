@@ -1,5 +1,6 @@
 package com.gyubot.user.client;
 
+import com.gyubot.user.exception.DuplicateEmailException;
 import com.gyubot.user.exception.PasswordChangeException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cloud.client.ServiceInstance;
@@ -51,6 +52,25 @@ public class AuthServiceClient {
         }
     }
 
+    /*
+     * 가입 승인 시 auth-service에 실제 로그인 계정을 만든다. encodedPassword는 가입 신청
+     * 접수 시점에 이미 해시된 값이라 auth-service는 이를 재해시하지 않고 그대로 저장한다.
+     */
+    public Long createUser(Long companyId, String email, String encodedPassword, String name) {
+        String baseUrl = resolveBaseUrl();
+        try {
+            CreateUserResponse response = restClient.post()
+                    .uri(baseUrl + "/internal/auth-users")
+                    .header("X-Internal-Token", internalToken)
+                    .body(new CreateUserPayload(companyId, email, encodedPassword, name, "EMPLOYEE"))
+                    .retrieve()
+                    .body(CreateUserResponse.class);
+            return response.id();
+        } catch (HttpClientErrorException.Conflict e) {
+            throw new DuplicateEmailException();
+        }
+    }
+
     private String resolveBaseUrl() {
         List<ServiceInstance> instances = discoveryClient.getInstances(SERVICE_ID);
         if (instances.isEmpty()) {
@@ -60,5 +80,11 @@ public class AuthServiceClient {
     }
 
     private record ChangePasswordPayload(String currentPassword, String newPassword) {
+    }
+
+    private record CreateUserPayload(Long companyId, String email, String encodedPassword, String name, String role) {
+    }
+
+    private record CreateUserResponse(Long id) {
     }
 }

@@ -14,6 +14,10 @@ spring:
   sql:
     init:
       mode: always
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 10MB
 
 server:
   port: 8082
@@ -41,3 +45,6 @@ app:
   internal:
     # auth-service의 내부 API 호출용 공유 시크릿 (auth-service와 동일한 값이어야 함)
     token: ${INTERNAL_API_TOKEN:change-this-internal-token}
+  upload:
+    # 가입 신청 첨부파일(명함·재직증명서) 저장 경로. document-service가 생기기 전까지는 로컬 디스크에 둔다.
+    dir: ${UPLOAD_DIR:/tmp/gyubot-uploads}
