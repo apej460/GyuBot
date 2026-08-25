@@ -69,7 +69,8 @@ services:
     volumes:
       - minio-data:/data
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      # 이 이미지엔 curl/wget이 없어(coreutils만 존재) bash의 /dev/tcp로 대체.
+      test: ["CMD", "bash", "-c", "echo > /dev/tcp/localhost/9000"]
       interval: 5s
       timeout: 5s
       retries: 10
