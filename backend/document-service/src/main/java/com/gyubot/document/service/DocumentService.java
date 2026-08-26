@@ -71,8 +71,27 @@ public class DocumentService {
         documentEventPublisher.publishDeleted(document);
     }
 
-    public DownloadedFile download(Long id) {
+    /*
+     * 다운로드는 관리자뿐 아니라 챗봇 답변의 "원문 확인"을 통해 임직원도 호출한다.
+     * 다른 회사 문서를 id만으로 접근하지 못하도록 companyId를 반드시 확인한다 (REQ-F-018).
+     */
+    public DownloadedFile download(Long id, Long companyId) {
         Document document = requireById(id);
+        if (!document.companyId().equals(companyId)) {
+            throw new DocumentNotFoundException();
+        }
+        return download(document);
+    }
+
+    /*
+     * search-service가 Chunking을 위해 원문을 받아가는 내부 API 전용 — 이미 X-Internal-Token으로
+     * 인증된 신뢰할 수 있는 서비스 간 호출이라 companyId 확인이 필요 없다.
+     */
+    public DownloadedFile download(Long id) {
+        return download(requireById(id));
+    }
+
+    private DownloadedFile download(Document document) {
         ResponseInputStream<GetObjectResponse> content = s3StorageService.download(document.s3Key());
         return new DownloadedFile(document, content);
     }

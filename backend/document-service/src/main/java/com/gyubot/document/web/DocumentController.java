@@ -81,11 +81,12 @@ public class DocumentController {
     }
 
     /*
-     * 관리자 - 원본 파일 다운로드
+     * 임직원·관리자 공통 - 원본 파일 다운로드 (챗봇 답변의 "원문 확인"에서도 호출됨)
      */
     @GetMapping("/{id}/download")
-    public ResponseEntity<InputStreamResource> download(@PathVariable Long id) {
-        DocumentService.DownloadedFile file = documentService.download(id);
+    public ResponseEntity<InputStreamResource> download(Authentication authentication, @PathVariable Long id) {
+        Long companyId = principalOf(authentication).companyId();
+        DocumentService.DownloadedFile file = documentService.download(id, companyId);
         return ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType(file.document().contentType()))
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + file.document().originalFilename() + "\"")

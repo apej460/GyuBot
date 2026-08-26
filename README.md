@@ -86,7 +86,7 @@ MinIO 포트가 9000/9001이 아니라 9100/9101인 이유: 로컬에 Jupyter �
 - `/signup` — 회사 이메일이 없는 사용자의 예외 가입 신청 (이메일/이름/비밀번호 + 명함·재직증명서 파일), 인증 불필요
 - `/admin/members` — 회원 목록 + 상태 변경(정지/활성화) 버튼, 관리자만 (`meta.requiresAuth`, `meta.requiresAdmin` — 라우터 가드에서 `auth.user.role !== 'ADMIN'`이면 홈으로 리다이렉트, 백엔드도 동일하게 403으로 막으므로 이중 방어)
 - `/admin/signup-requests` — 대기 중인 가입 신청 목록, 첨부파일 열람, 승인/반려(반려 사유 입력) — 관리자만
-- `/chat` (`/chat/:id`) — AI 질의. 질문을 보내면 chat-service가 답변과 근거 문서를 함께 반환하고, 채팅 버블 아래에 근거 문서 파일명·발췌를 보여줍니다. 새 질문이 처음 성공하면 URL이 `/chat/{생성된 sessionId}`로 바뀌어(router.replace) 새로고침해도 같은 대화가 이어집니다.
+- `/chat` (`/chat/:id`) — AI 질의. 질문을 보내면 chat-service가 답변과 근거 문서를 함께 반환하고, 채팅 버블 아래에 근거 문서 파일명·발췌와 함께 **"원문 다운로드"** 링크(`/api/documents/{documentId}/download`로의 plain `<a target="_blank">`, 가입 신청 첨부파일 열람과 같은 패턴 — fetch 없이 쿠키가 그대로 실려 나가서 document-service의 인증을 그대로 통과함)를 보여줍니다. 새 질문이 처음 성공하면 URL이 `/chat/{생성된 sessionId}`로 바뀌어(router.replace) 새로고침해도 같은 대화가 이어집니다.
 - `/chat/history` — 질의 이력. 내 대화방 목록(제목+시각)에서 클릭하면 해당 대화방의 전체 메시지+근거를 `/chat/{id}`에서 이어서 볼 수 있습니다.
 
 개발 서버는 `vite.config.js`의 `server.proxy`로 `/api/*` 전체를 api-gateway(:8080) 하나로만 프록시합니다 — 서비스별 포트를 프론트가 알 필요 없이, 실제 라우팅은 게이트웨이가 맡습니다. 쿠키는 Vite가 프록시해주는 덕에 브라우저 입장에서는 항상 동일 출처(localhost:5173)라서 CORS 설정이 필요 없습니다.
@@ -110,14 +110,16 @@ MinIO 포트가 9000/9001이 아니라 9100/9101인 이유: 로컬에 Jupyter �
 
 ## document-service 참고
 
-- 포트 8083. 자기 전용 DB(`gyubot_document`)를 씀 — database-per-service 구조. auth-service가 발급한 JWT를 검증만 하며(user-service와 동일한 `JwtAuthenticationFilter` 패턴), `/api/documents/**`는 전부 관리자 전용입니다(설계상 "문서 관리"는 관리자 메뉴). 챗봇 답변에서 직원이 원문을 확인하는 흐름은 나중에 chat-service를 통해 이뤄질 예정이라 여기서는 다루지 않습니다.
-- API: `POST /api/documents`(multipart, 등록) · `GET /api/documents`(목록, 회사 소속만) · `GET /api/documents/{id}`(상세) · `PATCH /api/documents/{id}`(제목 수정) · `DELETE /api/documents/{id}`(삭제) · `GET /api/documents/{id}/download`(원본 다운로드).
+- 포트 8083. 자기 전용 DB(`gyubot_document`)를 씀 — database-per-service 구조. auth-service가 발급한 JWT를 검증만 하며(user-service와 동일한 `JwtAuthenticationFilter` 패턴), 등록·목록·수정·삭제는 관리자 전용입니다(설계상 "문서 관리"는 관리자 메뉴).
+- API: `POST /api/documents`(multipart, 등록, 관리자) · `GET /api/documents`(목록, 회사 소속만, 관리자) · `GET /api/documents/{id}`(상세, 관리자) · `PATCH /api/documents/{id}`(제목 수정, 관리자) · `DELETE /api/documents/{id}`(삭제, 관리자) · `GET /api/documents/{id}/download`(원본 다운로드, **임직원·관리자 공통**).
+- **다운로드만 임직원에게도 열려 있습니다** — 챗봇 답변의 "원문 확인"(REQ-F-006)에서 호출되므로 로그인만 요구합니다. 대신 `DocumentService.download(id, companyId)`가 문서의 companyId와 요청자의 companyId를 반드시 비교해서, 다른 회사 문서는 id를 안다고 해도 404로 막습니다(REQ-F-018). 문서 보안등급에 따른 다운로드 제한(REQ-F-008)은 아직 없습니다 — 문서에 등급 필드 자체가 없어서 나중에 등급 체계를 만들 때 같이 다룰 예정입니다.
 - REQ-F-012 기준 검증: 파일당 최대 50MB, PDF·HWP만 허용(확장자 기준 — HWP는 브라우저가 보고하는 content-type이 제각각이라 신뢰하지 않음).
 - **업로드 → S3 저장 → `document.uploaded` Kafka 이벤트 발행**까지 한 번에 처리합니다 (`DocumentService.upload()`). 삭제 시에는 S3 원본도 함께 지우고 `document.deleted` 이벤트를 발행합니다 — 두 이벤트 다 search-service가 구독해 벡터 색인을 만들거나 지우는 데 씁니다. S3 클라이언트는 로컬 개발에서 MinIO(S3 호환)를 바라보고, `app.s3.endpoint`를 비우면 실제 AWS로 그대로 전환됩니다.
 - `GET /internal/documents/{id}/download` — search-service가 Chunking을 위해 원본 파일을 내려받는 내부 전용 API. auth-service의 internal API와 동일하게 JWT가 아니라 `X-Internal-Token` 헤더로 보호합니다(`app.internal.token`, search-service와 같은 값이어야 함).
 - Spring Boot 4.1 관련 메모 두 가지: (1) Kafka `HealthIndicator`가 더 이상 기본 제공되지 않아(매 헬스체크마다 `describeCluster()` 호출 비용 때문) `health/KafkaHealthIndicator.java`를 직접 추가했습니다. (2) `Health`/`HealthIndicator` 클래스가 `org.springframework.boot.actuate.health`에서 `org.springframework.boot.health.contributor`(신설된 `spring-boot-health` 모듈)로 이동했습니다 — 옛 패키지로 import하면 컴파일 에러.
 - **가장 오래 걸린 삽질**: MinIO에 대한 모든 S3 요청이 AWS SDK for Java v2에서만 무한 대기하다 타임아웃되는 문제가 있었습니다(curl·AWS CLI·Python botocore는 전부 즉시 성공). MinIO 버전 문제(체크섬/청크 인코딩), IPv4/IPv6, HTTP 클라이언트 구현체(Apache vs `UrlConnectionHttpClient`) 순으로 의심하고 다 시도해봤지만 전부 아니었고, `lsof -i -P -n -a -p <pid>`로 확인해보니 **로컬에 떠 있던 Jupyter 커널이 ZMQ 채널 5개로 9000~9004 포트를 통째로 점유**하고 있어서 MinIO의 Docker 포트 매핑과 충돌한 것이었습니다. curl은 어느 프로세스가 응답하든 그럴듯한 응답이면 넘어가서 문제를 못 느꼈던 것. MinIO를 9100/9101로 옮겨서 해결했습니다 — 로컬에서 이 서비스를 실행할 때 9000번대 포트가 이미 쓰이고 있다면 먼저 의심할 것.
 - 검증 완료(2026-08-25): 실제 PDF 업로드 → S3에 저장되고 DB에 메타데이터 기록 → `document.uploaded` 이벤트를 Kafka에서 직접 consume해 페이로드 확인 → 목록/상세 조회 → 다운로드한 파일이 원본과 바이트 단위로 동일함 확인 → 제목 수정 → 허용 안 되는 파일 형식(txt) 업로드 시 400 → 삭제 후 목록에서 사라지고 상세 조회 404, S3 오브젝트도 실제로 삭제됨, `document.deleted` 이벤트 발행 확인 → 일반 직원 계정으로 접근 시 403 — 전부 실제 인프라(MariaDB+Kafka+MinIO)에 대해 curl과 AWS CLI로 확인.
+- 검증 완료(2026-08-26, 임직원 다운로드): 직원 계정으로 본인 회사 문서 다운로드 → 원본과 바이트 단위로 동일 확인, 존재하지 않는 id는 404, 미로그인 요청은 403, 문서 목록 등 다른 API는 여전히 403(다운로드만 예외로 열렸는지 확인) — 게이트웨이 경유로 확인. search-service가 색인용으로 쓰는 내부 다운로드(`download(id)`, companyId 확인 없음)는 그대로 잘 동작하는지도 재확인.
 
 ## search-service 참고
 

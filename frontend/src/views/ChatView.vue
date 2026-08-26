@@ -55,7 +55,10 @@ async function submitQuestion() {
         <div v-if="message.sources?.length" class="sources">
           <p class="sources-title">근거 문서</p>
           <div v-for="(source, i) in message.sources" :key="i" class="source">
-            <p class="source-file">{{ source.originalFilename }}</p>
+            <p class="source-file">
+              {{ source.originalFilename }}
+              <a :href="`/api/documents/${source.documentId}/download`" target="_blank">원문 다운로드</a>
+            </p>
             <p class="source-snippet">{{ source.snippet }}</p>
           </div>
         </div>
@@ -142,6 +145,11 @@ nav {
 .source-file {
   margin: 0;
   font-weight: bold;
+}
+.source-file a {
+  margin-left: 8px;
+  font-weight: normal;
+  font-size: 11px;
 }
 .source-snippet {
   margin: 2px 0 0;
