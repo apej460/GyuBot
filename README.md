@@ -59,6 +59,15 @@ MinIO 포트가 9000/9001이 아니라 9100/9101인 이유: 로컬에 Jupyter �
 
 서비스마다 자기 DB를 따로 쓰는 database-per-service 구조라, `mariadb-init/001-create-databases.sql`이 컨테이너 최초 생성 시 `gyubot_auth`·`gyubot_user`·`gyubot_document`·`gyubot_chat`을 함께 만듭니다. 이미 떠 있는 컨테이너에 새 서비스용 DB를 추가할 땐 init 스크립트가 다시 실행되지 않으니 `docker exec gyubot-mariadb mariadb -uroot -proot -e "CREATE DATABASE IF NOT EXISTS <db명>;"`로 수동 생성하고, 스크립트에도 같이 추가해 둘 것.
 
+## api-gateway 참고
+
+- 포트 8080. Spring Cloud Gateway의 MVC(서블릿, 블로킹) 구현체(`spring-cloud-starter-gateway-server-webmvc`)를 씁니다 — 나머지 서비스가 전부 WebFlux가 아니라 서블릿 기반(JdbcTemplate, 동기 RestClient)이라 그 스타일에 맞춘 선택입니다.
+- 라우트는 전부 `application.yml`에 명시적으로 정의합니다: `/api/auth/**` → auth-service, `/api/users/**` → user-service, `/api/documents/**` → document-service, `/api/chat/**` → chat-service. 각 서비스의 JWT/역할 검증은 그대로 각 서비스가 하고, 게이트웨이는 순수 라우팅만 합니다.
+- **`spring.cloud.gateway.server.webmvc.discovery.locator.enabled=false`로 명시적으로 꺼뒀습니다.** 켜두면 Eureka에 등록된 서비스마다 `/AUTH-SERVICE/**`, `/SEARCH-SERVICE/**`처럼 서비스명 그대로의 경로를 자동으로 만드는데, 그러면 `X-Internal-Token`으로만 보호된 내부 API(search-service의 `/internal/search` 등)가 이 게이트웨이를 통해 인증 없이 그대로 외부에 노출될 뻔했습니다. search-service는 아예 공개 라우트가 없습니다 — 다른 서비스가 내부적으로만 호출하는 구조라 게이트웨이로 노출할 이유가 없습니다.
+- **발견한 보안 버그와 수정**: Spring Cloud Gateway MVC가 프록시 요청에 기본으로 쓰는 `RestClient`는 내부적으로 Apache HttpClient5를 쓰는데, 이 클라이언트가 **기본값으로 쿠키 저장소(cookie store)를 켠 채** 만들어집니다. 그 결과 게이트웨이 자신이 백엔드 응답의 `Set-Cookie`(로그인 시 발급되는 JWT)를 저장해뒀다가, 완전히 다른(쿠키 없이 요청한) 클라이언트의 다음 요청에도 그 쿠키를 그대로 붙여서 전달해버리는 **세션 유출**이 실제로 재현됐습니다 (A가 로그인 → 곧바로 쿠키 없이 B가 같은 API를 호출해도 A의 데이터가 그대로 반환됨). `config/GatewayHttpClientConfig.java`에서 `HttpClients.custom().disableCookieManagement()`로 만든 `ClientHttpRequestFactory` 빈을 등록해 해결했습니다 — 게이트웨이가 만드는 `RestClientCustomizer`가 이 빈을 자동으로 집어가 프록시용 RestClient에 적용합니다. 게이트웨이는 순수 프록시라 원래 클라이언트가 보낸 헤더만 그대로 전달하면 되고 자체적으로 쿠키를 들고 있으면 안 되므로, 매 요청이 완전히 독립적이도록 쿠키 관리 자체를 껐습니다.
+- **잠깐 겪은 별개 문제**: 오래 떠 있던 auth-service/user-service가 Eureka에 예전 IP(맥 네트워크 인터페이스가 그사이 바뀌기 전 IP)로 등록된 채로 남아있어서, 게이트웨이가 그 주소로 프록시하려다 "Network is unreachable"로 실패했습니다. 두 서비스를 재기동해서 현재 IP로 다시 등록하니 바로 해결됨 — **오래 켜둔 서비스가 갑자기 다른 서비스로부터의 요청만 실패한다면(직접 호출은 되는데) Eureka에 등록된 IP가 최신인지부터 의심할 것.**
+- 검증 완료(2026-08-26): 로그인·내 정보·AI 질의·문서 목록(관리자) 전부 게이트웨이(:8080)를 통해 정상 동작, 관리자 전용 API에 직원 계정으로 접근 시 403 그대로 전달, search-service 내부 API와 discovery-locator 스타일 raw 경로 모두 404로 막힘, 로그인 직후 쿠키 없는 요청이 더 이상 세션을 가로채지 않는 것까지 확인. 프론트엔드도 Vite 프록시를 게이트웨이 하나로 합친 뒤 실제 Chrome 브라우저로 AI 질의 화면이 그대로 동작하는 것까지 확인.
+
 ## auth-service 참고
 
 - 포트 8081. `/actuator/health`에 `show-details: always`가 켜져 있어 DB·Redis·Mail·Eureka 연결 상태를 한 번에 확인할 수 있습니다.
@@ -80,7 +89,7 @@ MinIO 포트가 9000/9001이 아니라 9100/9101인 이유: 로컬에 Jupyter �
 - `/chat` (`/chat/:id`) — AI 질의. 질문을 보내면 chat-service가 답변과 근거 문서를 함께 반환하고, 채팅 버블 아래에 근거 문서 파일명·발췌를 보여줍니다. 새 질문이 처음 성공하면 URL이 `/chat/{생성된 sessionId}`로 바뀌어(router.replace) 새로고침해도 같은 대화가 이어집니다.
 - `/chat/history` — 질의 이력. 내 대화방 목록(제목+시각)에서 클릭하면 해당 대화방의 전체 메시지+근거를 `/chat/{id}`에서 이어서 볼 수 있습니다.
 
-개발 서버는 `vite.config.js`의 `server.proxy`로 `/api/auth/*`는 auth-service(:8081), `/api/users/*`는 user-service(:8082), `/api/chat/*`는 chat-service(:8085)로 각각 프록시합니다. 겹치는 서비스가 없어서 프록시 규칙을 경로별로 나눴습니다 (api-gateway 라우팅이 갖춰지면 하나의 타겟으로 합치면 됨). 쿠키는 Vite가 프록시해주는 덕에 브라우저 입장에서는 항상 동일 출처(localhost:5173)라서 CORS 설정이 필요 없습니다.
+개발 서버는 `vite.config.js`의 `server.proxy`로 `/api/*` 전체를 api-gateway(:8080) 하나로만 프록시합니다 — 서비스별 포트를 프론트가 알 필요 없이, 실제 라우팅은 게이트웨이가 맡습니다. 쿠키는 Vite가 프록시해주는 덕에 브라우저 입장에서는 항상 동일 출처(localhost:5173)라서 CORS 설정이 필요 없습니다.
 
 - 상태 관리: `src/stores/auth.js`(로그인 세션) / `src/stores/member.js`(프로필·회원 관리) / `src/stores/signup.js`(가입 신청 제출 + 관리자 승인/반려) / `src/stores/chat.js`(질문 전송·대화 이력)
 - API 클라이언트: `src/api/http.js` (axios, `withCredentials: true`)

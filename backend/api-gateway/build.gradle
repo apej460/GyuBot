@@ -21,6 +21,10 @@ dependencies {
     implementation platform("org.springframework.cloud:spring-cloud-dependencies:${springCloudVersion}")
     implementation 'org.springframework.cloud:spring-cloud-starter-gateway-server-webmvc'
     implementation 'org.springframework.cloud:spring-cloud-starter-netflix-eureka-client'
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+    // 게이트웨이 프록시용 RestClient의 쿠키 관리를 직접 끄기 위해 명시적으로 의존성을 선언한다
+    // (지금까지는 gateway-server-webmvc를 통해 전이 의존성으로만 들어와 있었음).
+    implementation 'org.apache.httpcomponents.client5:httpclient5'
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
 }
 

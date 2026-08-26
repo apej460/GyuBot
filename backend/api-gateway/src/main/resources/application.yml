@@ -1,0 +1,48 @@
+spring:
+  application:
+    name: api-gateway
+  cloud:
+    gateway:
+      server:
+        webmvc:
+          # 명시적 라우트만 쓴다. discovery.locator를 켜두면 Eureka에 등록된 서비스마다
+          # /AUTH-SERVICE/**, /SEARCH-SERVICE/** 같은 원시 경로를 자동으로 만들어버려서,
+          # X-Internal-Token으로만 보호된 내부 API(search-service의 /internal/search 등)가
+          # 게이트웨이를 통해 인증 없이 그대로 노출될 위험이 있다.
+          discovery:
+            locator:
+              enabled: false
+          routes:
+            - id: auth-service
+              uri: lb://auth-service
+              predicates:
+                - Path=/api/auth/**
+            - id: user-service
+              uri: lb://user-service
+              predicates:
+                - Path=/api/users/**
+            - id: document-service
+              uri: lb://document-service
+              predicates:
+                - Path=/api/documents/**
+            - id: chat-service
+              uri: lb://chat-service
+              predicates:
+                - Path=/api/chat/**
+
+server:
+  port: 8080
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_URL:http://localhost:8761/eureka/}
