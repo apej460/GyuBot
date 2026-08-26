@@ -31,84 +31,56 @@ async function submitChangePassword() {
 
 <template>
   <div class="page">
-    <nav><RouterLink to="/">← 홈</RouterLink></nav>
     <h1>내 정보</h1>
 
-    <dl v-if="memberStore.me">
-      <dt>이름</dt>
-      <dd>{{ memberStore.me.name }}</dd>
-      <dt>이메일</dt>
-      <dd>{{ memberStore.me.email }}</dd>
-      <dt>회사 ID</dt>
-      <dd>{{ memberStore.me.companyId }}</dd>
-      <dt>역할</dt>
-      <dd>{{ memberStore.me.role }}</dd>
-      <dt>상태</dt>
-      <dd>{{ memberStore.me.status }}</dd>
-    </dl>
+    <el-card v-if="memberStore.me" shadow="never" class="section">
+      <el-descriptions :column="1" border>
+        <el-descriptions-item label="이름">{{ memberStore.me.name }}</el-descriptions-item>
+        <el-descriptions-item label="이메일">{{ memberStore.me.email }}</el-descriptions-item>
+        <el-descriptions-item label="회사 ID">{{ memberStore.me.companyId }}</el-descriptions-item>
+        <el-descriptions-item label="역할">{{ memberStore.me.role }}</el-descriptions-item>
+        <el-descriptions-item label="상태">
+          <el-tag :type="memberStore.me.status === 'ACTIVE' ? 'success' : 'danger'" size="small">
+            {{ memberStore.me.status }}
+          </el-tag>
+        </el-descriptions-item>
+      </el-descriptions>
+    </el-card>
 
-    <h2>비밀번호 변경</h2>
-    <form @submit.prevent="submitChangePassword">
-      <label>
-        현재 비밀번호
-        <input v-model="currentPassword" type="password" required autocomplete="current-password" />
-      </label>
-      <label>
-        새 비밀번호 (8자 이상)
-        <input v-model="newPassword" type="password" required minlength="8" autocomplete="new-password" />
-      </label>
-      <button type="submit" :disabled="submitting">변경하기</button>
-    </form>
+    <el-card shadow="never" class="section">
+      <h2 class="section-title">비밀번호 변경</h2>
+      <el-form label-position="top" @submit.prevent="submitChangePassword">
+        <el-form-item label="현재 비밀번호">
+          <el-input v-model="currentPassword" type="password" show-password autocomplete="current-password" />
+        </el-form-item>
+        <el-form-item label="새 비밀번호 (8자 이상)">
+          <el-input v-model="newPassword" type="password" show-password minlength="8" autocomplete="new-password" />
+        </el-form-item>
+        <el-button type="primary" native-type="submit" :loading="submitting">변경하기</el-button>
+      </el-form>
 
-    <p v-if="success" class="success">{{ success }}</p>
-    <p v-if="memberStore.error" class="error">{{ memberStore.error }}</p>
+      <el-alert v-if="success" :title="success" type="success" show-icon :closable="false" class="alert" />
+      <el-alert v-if="memberStore.error" :title="memberStore.error" type="error" show-icon :closable="false" class="alert" />
+    </el-card>
   </div>
 </template>
 
 <style scoped>
 .page {
-  max-width: 420px;
-  margin: 60px auto;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 20px;
+  max-width: 480px;
 }
-dl {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 4px 12px;
-  font-size: 14px;
+.page h1 {
   margin: 0;
+  font-size: 22px;
 }
-dt {
-  color: #666;
+.section-title {
+  margin: 0 0 16px;
+  font-size: 16px;
 }
-dd {
-  margin: 0;
-}
-form {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-label {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: 14px;
-}
-input {
-  padding: 8px;
-  font-size: 14px;
-}
-button {
-  padding: 10px;
-  cursor: pointer;
-}
-.success {
-  color: #2e7d32;
-}
-.error {
-  color: #c0392b;
+.alert {
+  margin-top: 12px;
 }
 </style>

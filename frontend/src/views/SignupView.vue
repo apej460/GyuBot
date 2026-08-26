@@ -11,8 +11,8 @@ const attachment = ref(null)
 const submitting = ref(false)
 const submitted = ref(false)
 
-function handleFileChange(e) {
-  attachment.value = e.target.files[0] ?? null
+function handleFileChange(file) {
+  attachment.value = file.raw
 }
 
 async function submitSignup() {
@@ -34,75 +34,103 @@ async function submitSignup() {
 </script>
 
 <template>
-  <div class="signup">
-    <h1>가입 신청</h1>
-    <p class="hint">
-      회사 이메일이 없는 경우, 명함이나 재직증명서를 첨부해 예외 가입을 신청할 수 있습니다.
-      관리자 승인 후 로그인할 수 있습니다.
-    </p>
+  <div class="auth-page">
+    <el-card class="auth-card" shadow="never">
+      <h1 class="title">가입 신청</h1>
+      <p class="hint-text">
+        회사 이메일이 없는 경우, 명함이나 재직증명서를 첨부해 예외 가입을 신청할 수 있습니다.
+        관리자 승인 후 로그인할 수 있습니다.
+      </p>
 
-    <form v-if="!submitted" @submit.prevent="submitSignup">
-      <label>
-        이메일
-        <input v-model="email" type="email" required autocomplete="email" />
-      </label>
-      <label>
-        이름
-        <input v-model="name" type="text" required autocomplete="name" />
-      </label>
-      <label>
-        비밀번호 (8자 이상)
-        <input v-model="password" type="password" required minlength="8" autocomplete="new-password" />
-      </label>
-      <label>
-        명함 / 재직증명서 (JPG, PNG, PDF)
-        <input type="file" accept=".jpg,.jpeg,.png,.pdf" required @change="handleFileChange" />
-      </label>
-      <button type="submit" :disabled="submitting">가입 신청</button>
-    </form>
+      <el-form v-if="!submitted" label-position="top" @submit.prevent="submitSignup">
+        <el-form-item label="이메일">
+          <el-input v-model="email" type="email" autocomplete="email" />
+        </el-form-item>
+        <el-form-item label="이름">
+          <el-input v-model="name" autocomplete="name" />
+        </el-form-item>
+        <el-form-item label="비밀번호 (8자 이상)">
+          <el-input v-model="password" type="password" show-password minlength="8" autocomplete="new-password" />
+        </el-form-item>
+        <el-form-item label="명함 / 재직증명서 (JPG, PNG, PDF)">
+          <el-upload
+            drag
+            :auto-upload="false"
+            :limit="1"
+            accept=".jpg,.jpeg,.png,.pdf"
+            :on-change="handleFileChange"
+            class="upload"
+          >
+            <p class="upload-text">파일을 드래그하거나 클릭해서 첨부하세요</p>
+          </el-upload>
+        </el-form-item>
+        <el-button
+          type="primary"
+          native-type="submit"
+          :loading="submitting"
+          :disabled="!attachment"
+          class="submit-btn"
+        >
+          가입 신청
+        </el-button>
+      </el-form>
 
-    <p v-else class="success">{{ signupStore.successMessage }}</p>
-    <p v-if="signupStore.error" class="error">{{ signupStore.error }}</p>
+      <el-result v-else icon="success" :title="signupStore.successMessage" />
 
-    <RouterLink to="/login">← 로그인으로 돌아가기</RouterLink>
+      <el-alert
+        v-if="signupStore.error"
+        :title="signupStore.error"
+        type="error"
+        show-icon
+        :closable="false"
+        class="alert"
+      />
+
+      <RouterLink to="/login" class="back-link">← 로그인으로 돌아가기</RouterLink>
+    </el-card>
   </div>
 </template>
 
 <style scoped>
-.signup {
-  max-width: 380px;
-  margin: 60px auto;
+.auth-page {
+  min-height: 100vh;
   display: flex;
-  flex-direction: column;
-  gap: 16px;
+  align-items: center;
+  justify-content: center;
+  background: #f5f7fa;
+  padding: 40px 16px;
 }
-form {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+.auth-card {
+  width: 420px;
 }
-label {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: 14px;
+.title {
+  margin: 0 0 8px;
+  font-size: 20px;
 }
-input {
-  padding: 8px;
-  font-size: 14px;
-}
-button {
-  padding: 10px;
-  cursor: pointer;
-}
-.hint {
+.hint-text {
+  margin: 0 0 20px;
   font-size: 13px;
-  color: #666;
+  color: #909399;
+  line-height: 1.6;
 }
-.success {
-  color: #2e7d32;
+.upload {
+  width: 100%;
 }
-.error {
-  color: #c0392b;
+.upload-text {
+  margin: 0;
+  font-size: 13px;
+  color: #909399;
+}
+.submit-btn {
+  width: 100%;
+}
+.alert {
+  margin-top: 12px;
+}
+.back-link {
+  display: block;
+  margin-top: 16px;
+  text-align: center;
+  font-size: 13px;
 }
 </style>

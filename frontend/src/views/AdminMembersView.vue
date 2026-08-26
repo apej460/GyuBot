@@ -16,74 +16,41 @@ async function toggleStatus(member) {
 
 <template>
   <div class="page">
-    <nav><RouterLink to="/">← 홈</RouterLink></nav>
     <h1>회원 관리</h1>
 
-    <table>
-      <thead>
-        <tr>
-          <th>ID</th>
-          <th>이름</th>
-          <th>이메일</th>
-          <th>역할</th>
-          <th>상태</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr v-for="m in memberStore.members" :key="m.id">
-          <td>{{ m.id }}</td>
-          <td>{{ m.name }}</td>
-          <td>{{ m.email }}</td>
-          <td>{{ m.role }}</td>
-          <td>
-            <span :class="['status', m.status === 'ACTIVE' ? 'active' : 'suspended']">{{ m.status }}</span>
-          </td>
-          <td>
-            <button @click="toggleStatus(m)">
-              {{ m.status === 'ACTIVE' ? '정지' : '활성화' }}
-            </button>
-          </td>
-        </tr>
-      </tbody>
-    </table>
+    <el-card shadow="never">
+      <el-table :data="memberStore.members" style="width: 100%">
+        <el-table-column prop="id" label="ID" width="70" />
+        <el-table-column prop="name" label="이름" width="140" />
+        <el-table-column prop="email" label="이메일" />
+        <el-table-column prop="role" label="역할" width="100" />
+        <el-table-column label="상태" width="110">
+          <template #default="{ row }">
+            <el-tag :type="row.status === 'ACTIVE' ? 'success' : 'danger'" size="small">
+              {{ row.status }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="" width="100" align="right">
+          <template #default="{ row }">
+            <el-button size="small" @click="toggleStatus(row)">
+              {{ row.status === 'ACTIVE' ? '정지' : '활성화' }}
+            </el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-card>
   </div>
 </template>
 
 <style scoped>
 .page {
-  max-width: 640px;
-  margin: 60px auto;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 20px;
 }
-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 14px;
-}
-th,
-td {
-  text-align: left;
-  padding: 8px;
-  border-bottom: 1px solid #eee;
-}
-button {
-  padding: 6px 10px;
-  cursor: pointer;
-}
-.status {
-  padding: 2px 8px;
-  border-radius: 4px;
-  font-size: 12px;
-}
-.status.active {
-  background: #e8f5e9;
-  color: #2e7d32;
-}
-.status.suspended {
-  background: #ffebee;
-  color: #c0392b;
+.page h1 {
+  margin: 0;
+  font-size: 22px;
 }
 </style>

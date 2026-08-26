@@ -27,86 +27,77 @@ async function confirmReject() {
 
 <template>
   <div class="page">
-    <nav><RouterLink to="/">← 홈</RouterLink></nav>
     <h1>가입 승인</h1>
 
-    <p v-if="signupStore.requests.length === 0" class="empty">대기 중인 가입 신청이 없습니다.</p>
+    <el-empty v-if="signupStore.requests.length === 0" description="대기 중인 가입 신청이 없습니다." />
 
-    <ul class="requests">
-      <li v-for="r in signupStore.requests" :key="r.id">
+    <el-card v-for="r in signupStore.requests" :key="r.id" shadow="never" class="request-card">
+      <div class="request">
         <div class="info">
           <strong>{{ r.name }}</strong>
-          <span>{{ r.email }}</span>
-          <a :href="`/api/users/signup-requests/${r.id}/attachment`" target="_blank"
-            >첨부파일 보기 ({{ r.attachmentFilename }})</a
-          >
+          <span class="email">{{ r.email }}</span>
+          <a :href="`/api/users/signup-requests/${r.id}/attachment`" target="_blank" class="attachment-link">
+            첨부파일 보기 ({{ r.attachmentFilename }})
+          </a>
         </div>
 
-        <div class="actions" v-if="rejectingId !== r.id">
-          <button @click="handleApprove(r.id)">승인</button>
-          <button @click="startReject(r.id)">반려</button>
+        <div v-if="rejectingId !== r.id" class="actions">
+          <el-button type="primary" size="small" @click="handleApprove(r.id)">승인</el-button>
+          <el-button size="small" @click="startReject(r.id)">반려</el-button>
         </div>
-        <div class="reject-form" v-else>
-          <input v-model="reason" placeholder="반려 사유" />
-          <button @click="confirmReject">반려 확정</button>
-          <button @click="rejectingId = null">취소</button>
+        <div v-else class="reject-form">
+          <el-input v-model="reason" placeholder="반려 사유" size="small" />
+          <el-button type="danger" size="small" @click="confirmReject">반려 확정</el-button>
+          <el-button size="small" @click="rejectingId = null">취소</el-button>
         </div>
-      </li>
-    </ul>
+      </div>
+    </el-card>
   </div>
 </template>
 
 <style scoped>
 .page {
-  max-width: 560px;
-  margin: 60px auto;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 20px;
 }
-.empty {
-  color: #666;
-  font-size: 14px;
+.page h1 {
+  margin: 0;
+  font-size: 22px;
 }
-.requests {
-  list-style: none;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+.request-card :deep(.el-card__body) {
+  padding: 16px;
 }
-.requests li {
-  border: 1px solid #eee;
-  border-radius: 6px;
-  padding: 12px;
+.request {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 12px;
+  gap: 16px;
+  flex-wrap: wrap;
 }
 .info {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
   font-size: 14px;
 }
-.info span {
-  color: #666;
+.email {
+  color: #909399;
+}
+.attachment-link {
+  font-size: 13px;
 }
 .actions {
   display: flex;
   gap: 8px;
+  flex-shrink: 0;
 }
 .reject-form {
   display: flex;
   gap: 8px;
+  flex-shrink: 0;
 }
-.reject-form input {
-  padding: 6px;
-  font-size: 13px;
-}
-button {
-  padding: 6px 10px;
-  cursor: pointer;
+.reject-form .el-input {
+  width: 180px;
 }
 </style>

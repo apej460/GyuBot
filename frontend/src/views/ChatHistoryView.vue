@@ -15,69 +15,52 @@ function formatDate(iso) {
 
 <template>
   <div class="page">
-    <nav>
-      <RouterLink to="/chat">← AI 질의</RouterLink>
-    </nav>
     <h1>질의 이력</h1>
 
-    <p v-if="chatStore.loadingHistory">불러오는 중…</p>
-    <p v-else-if="chatStore.sessions.length === 0" class="empty">아직 대화 이력이 없습니다.</p>
+    <el-skeleton v-if="chatStore.loadingHistory" :rows="4" animated />
+    <el-empty v-else-if="chatStore.sessions.length === 0" description="아직 대화 이력이 없습니다." />
 
-    <ul class="sessions">
-      <li v-for="session in chatStore.sessions" :key="session.id">
-        <RouterLink :to="{ name: 'chat', params: { id: session.id } }">
-          <span class="title">{{ session.title }}</span>
-          <span class="date">{{ formatDate(session.createdAt) }}</span>
-        </RouterLink>
-      </li>
-    </ul>
+    <el-card v-else shadow="never">
+      <el-table :data="chatStore.sessions" style="width: 100%" @row-click="(row) => $router.push({ name: 'chat', params: { id: row.id } })">
+        <el-table-column label="질문">
+          <template #default="{ row }">
+            <RouterLink :to="{ name: 'chat', params: { id: row.id } }" class="title-link">
+              {{ row.title }}
+            </RouterLink>
+          </template>
+        </el-table-column>
+        <el-table-column label="일시" width="200">
+          <template #default="{ row }">
+            <span class="date">{{ formatDate(row.createdAt) }}</span>
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-card>
   </div>
 </template>
 
 <style scoped>
 .page {
-  max-width: 640px;
-  margin: 40px auto;
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  padding: 0 16px;
+  gap: 20px;
 }
-nav {
-  display: flex;
-  gap: 12px;
-}
-.empty {
-  color: #999;
-}
-.sessions {
-  list-style: none;
+.page h1 {
   margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+  font-size: 22px;
 }
-.sessions a {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 12px;
-  text-decoration: none;
+.title-link {
   color: inherit;
-  border-bottom: 1px solid #eee;
+  text-decoration: none;
 }
-.sessions a:hover {
-  background: #f8f8f8;
-}
-.title {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.title-link:hover {
+  color: var(--el-color-primary);
 }
 .date {
-  flex-shrink: 0;
-  color: #999;
-  font-size: 12px;
+  color: #909399;
+  font-size: 13px;
+}
+:deep(.el-table__row) {
+  cursor: pointer;
 }
 </style>
