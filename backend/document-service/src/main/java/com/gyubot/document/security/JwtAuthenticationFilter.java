@@ -50,7 +50,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
                         principal,
                         null,
-                        List.of(new SimpleGrantedAuthority("ROLE_" + principal.role())));
+                        authoritiesFor(principal.role()));
 
                 SecurityContextHolder.getContext().setAuthentication(authentication);
 
@@ -60,5 +60,15 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         });
 
         filterChain.doFilter(request, response);
+    }
+
+    /*
+     * SUPER_ADMIN은 ADMIN이 하는 모든 걸 그대로 할 수 있어야 하므로 ROLE_ADMIN도 같이 부여한다.
+     */
+    private List<SimpleGrantedAuthority> authoritiesFor(Role role) {
+        if (role == Role.SUPER_ADMIN) {
+            return List.of(new SimpleGrantedAuthority("ROLE_ADMIN"), new SimpleGrantedAuthority("ROLE_SUPER_ADMIN"));
+        }
+        return List.of(new SimpleGrantedAuthority("ROLE_" + role));
     }
 }

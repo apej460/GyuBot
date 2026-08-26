@@ -12,6 +12,7 @@ import org.springframework.web.multipart.MultipartFile;
 import software.amazon.awssdk.core.ResponseInputStream;
 import software.amazon.awssdk.services.s3.model.GetObjectResponse;
 
+import java.time.LocalDate;
 import java.util.List;
 
 @Service
@@ -34,14 +35,17 @@ public class DocumentService {
     }
 
     @Transactional
-    public Document upload(Long companyId, String title, MultipartFile file) {
+    public Document upload(
+            Long companyId, String title, String version, String category,
+            LocalDate effectiveDate, LocalDate revisionDate, MultipartFile file) {
         validate(file);
 
         String s3Key = S3StorageService.newKey(companyId, file.getOriginalFilename());
         s3StorageService.upload(file, s3Key);
 
         Document saved = documentRepository.save(
-                companyId, title, file.getOriginalFilename(), file.getContentType(), file.getSize(), s3Key);
+                companyId, title, file.getOriginalFilename(), file.getContentType(), file.getSize(), s3Key,
+                version, category, effectiveDate, revisionDate);
         documentEventPublisher.publishUploaded(saved);
         return saved;
     }
@@ -49,6 +53,11 @@ public class DocumentService {
     @Transactional(readOnly = true)
     public List<Document> listByCompany(Long companyId) {
         return documentRepository.findAllByCompanyId(companyId);
+    }
+
+    @Transactional(readOnly = true)
+    public int countByCompany(Long companyId) {
+        return documentRepository.countByCompanyId(companyId);
     }
 
     @Transactional(readOnly = true)

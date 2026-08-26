@@ -3,9 +3,11 @@ package com.gyubot.document.web;
 import com.gyubot.document.security.AuthPrincipal;
 import com.gyubot.document.service.DocumentService;
 import com.gyubot.document.web.dto.DocumentResponse;
+import com.gyubot.document.web.dto.DocumentStatsResponse;
 import com.gyubot.document.web.dto.UpdateDocumentRequest;
 import jakarta.validation.Valid;
 import org.springframework.core.io.InputStreamResource;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -21,6 +23,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.time.LocalDate;
 import java.util.List;
 
 @RestController
@@ -40,9 +43,14 @@ public class DocumentController {
     public DocumentResponse upload(
             Authentication authentication,
             @RequestParam String title,
+            @RequestParam(required = false) String version,
+            @RequestParam(required = false) String category,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate effectiveDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate revisionDate,
             @RequestParam("file") MultipartFile file) {
         Long companyId = principalOf(authentication).companyId();
-        return DocumentResponse.from(documentService.upload(companyId, title, file));
+        return DocumentResponse.from(
+                documentService.upload(companyId, title, version, category, effectiveDate, revisionDate, file));
     }
 
     /*
@@ -54,6 +62,14 @@ public class DocumentController {
         return documentService.listByCompany(companyId).stream()
                 .map(DocumentResponse::from)
                 .toList();
+    }
+
+    /*
+     * 관리자 - 운영 대시보드용 문서 수 (본인 회사 소속만)
+     */
+    @GetMapping("/stats")
+    public DocumentStatsResponse stats(Authentication authentication) {
+        return new DocumentStatsResponse(documentService.countByCompany(principalOf(authentication).companyId()));
     }
 
     /*
