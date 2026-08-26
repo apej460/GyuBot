@@ -2,5 +2,6 @@ package com.gyubot.chat.domain;
 
 public enum Role {
     EMPLOYEE,
-    ADMIN
+    ADMIN,
+    SUPER_ADMIN
 }

@@ -3,10 +3,12 @@ package com.gyubot.chat.web;
 import com.gyubot.chat.domain.ChatMessage;
 import com.gyubot.chat.security.AuthPrincipal;
 import com.gyubot.chat.service.ChatService;
+import com.gyubot.chat.service.ChatStatsService;
 import com.gyubot.chat.web.dto.AskRequest;
 import com.gyubot.chat.web.dto.AskResponse;
 import com.gyubot.chat.web.dto.ChatMessageResponse;
 import com.gyubot.chat.web.dto.ChatSessionResponse;
+import com.gyubot.chat.web.dto.ChatStatsResponse;
 import jakarta.validation.Valid;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -23,9 +25,19 @@ import java.util.List;
 public class ChatController {
 
     private final ChatService chatService;
+    private final ChatStatsService chatStatsService;
 
-    public ChatController(ChatService chatService) {
+    public ChatController(ChatService chatService, ChatStatsService chatStatsService) {
         this.chatService = chatService;
+        this.chatStatsService = chatStatsService;
+    }
+
+    /*
+     * 관리자 - 운영 대시보드 통계 (금일 질의 수, 미답변 질문, 최근 7일 질의량, 자주 나온 키워드)
+     */
+    @GetMapping("/stats")
+    public ChatStatsResponse stats(Authentication authentication) {
+        return ChatStatsResponse.from(chatStatsService.forCompany(principalOf(authentication).companyId()));
     }
 
     /*
