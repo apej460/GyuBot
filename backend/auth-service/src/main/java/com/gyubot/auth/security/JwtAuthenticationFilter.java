@@ -46,7 +46,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
                         principal,
                         null,
-                        List.of(new SimpleGrantedAuthority("ROLE_" + principal.role())));
+                        authoritiesFor(principal.role()));
 
                 SecurityContextHolder.getContext().setAuthentication(authentication);
 
@@ -56,5 +56,16 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         });
 
         filterChain.doFilter(request, response);
+    }
+
+    /*
+     * SUPER_ADMIN은 시스템 관리 화면 전용 추가 권한이지, ADMIN이 하는 모든 걸 못 하게 되면 안 된다.
+     * 그래서 SUPER_ADMIN에게는 ROLE_ADMIN도 같이 부여해 기존 hasRole("ADMIN") 검사를 그대로 통과시킨다.
+     */
+    private List<SimpleGrantedAuthority> authoritiesFor(Role role) {
+        if (role == Role.SUPER_ADMIN) {
+            return List.of(new SimpleGrantedAuthority("ROLE_ADMIN"), new SimpleGrantedAuthority("ROLE_SUPER_ADMIN"));
+        }
+        return List.of(new SimpleGrantedAuthority("ROLE_" + role));
     }
 }

@@ -1,9 +1,11 @@
 package com.gyubot.auth.web;
 
+import com.gyubot.auth.exception.DuplicateCompanyDomainException;
 import com.gyubot.auth.exception.DuplicateEmailException;
 import com.gyubot.auth.exception.InternalAuthException;
 import com.gyubot.auth.exception.InvalidCredentialsException;
 import com.gyubot.auth.exception.OtpVerificationException;
+import com.gyubot.auth.exception.UnregisteredDomainException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -31,6 +33,17 @@ public class ApiExceptionHandler {
     ResponseEntity<Map<String, String>> duplicateEmail(DuplicateEmailException e) {
         return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(Map.of("code", "DUPLICATE_EMAIL", "message", e.getMessage()));
+    }
+
+    @ExceptionHandler(DuplicateCompanyDomainException.class)
+    ResponseEntity<Map<String, String>> duplicateCompanyDomain(DuplicateCompanyDomainException e) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(Map.of("code", "DUPLICATE_COMPANY_DOMAIN", "message", e.getMessage()));
+    }
+
+    @ExceptionHandler(UnregisteredDomainException.class)
+    ResponseEntity<Map<String, String>> unregisteredDomain(UnregisteredDomainException e) {
+        return ResponseEntity.badRequest().body(Map.of("code", "UNREGISTERED_DOMAIN", "message", e.getMessage()));
     }
 
     @ExceptionHandler(InternalAuthException.class)

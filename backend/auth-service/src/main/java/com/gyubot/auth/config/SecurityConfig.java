@@ -31,12 +31,14 @@ public class SecurityConfig {
                                 "/api/auth/login",
                                 "/api/auth/otp/verify",
                                 "/api/auth/refresh",
+                                "/api/auth/password-reset/**",
                                 "/internal/**",
                                 "/actuator/**",
                                 "/error",
                                 "/swagger-ui/**",
                                 "/v3/api-docs/**")
                         .permitAll()
+                        .requestMatchers("/api/companies/**").hasRole("SUPER_ADMIN")
                         .anyRequest().authenticated())
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 

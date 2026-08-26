@@ -3,6 +3,7 @@ package com.gyubot.auth.web;
 import com.gyubot.auth.domain.AuthUser;
 import com.gyubot.auth.domain.Role;
 import com.gyubot.auth.exception.InvalidCredentialsException;
+import com.gyubot.auth.otp.OtpPurpose;
 import com.gyubot.auth.otp.OtpService;
 import com.gyubot.auth.security.AuthPrincipal;
 import com.gyubot.auth.security.CookieService;
@@ -14,6 +15,8 @@ import com.gyubot.auth.web.dto.AuthCheckResponse;
 import com.gyubot.auth.web.dto.LoginRequest;
 import com.gyubot.auth.web.dto.LoginResponse;
 import com.gyubot.auth.web.dto.OtpVerifyRequest;
+import com.gyubot.auth.web.dto.PasswordResetConfirmRequest;
+import com.gyubot.auth.web.dto.PasswordResetRequestRequest;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
@@ -59,7 +62,7 @@ public class AuthController {
     public LoginResponse login(@Valid @RequestBody LoginRequest request, HttpServletResponse response) {
         AuthUser user = authService.authenticate(request.email(), request.password());
 
-        if (user.role() == Role.ADMIN) {
+        if (user.role() == Role.ADMIN || user.role() == Role.SUPER_ADMIN) {
             otpService.issue(user.email());
             return new LoginResponse(true, "관리자 계정입니다. 이메일로 발송된 인증번호를 입력해주세요.");
         }
@@ -94,6 +97,24 @@ public class AuthController {
         cookieService.read(request, CookieService.REFRESH_TOKEN).ifPresent(refreshTokenService::revoke);
         response.addHeader(HttpHeaders.SET_COOKIE, cookieService.delete(CookieService.ACCESS_TOKEN).toString());
         response.addHeader(HttpHeaders.SET_COOKIE, cookieService.delete(CookieService.REFRESH_TOKEN).toString());
+    }
+
+    /*
+     * 비밀번호 재설정 1단계 - 이메일로 OTP 발송. 계정 소유자만 재설정할 수 있게 소유권을 증명시킨다.
+     */
+    @PostMapping("/password-reset/request")
+    public void requestPasswordReset(@Valid @RequestBody PasswordResetRequestRequest request) {
+        authService.requireByEmail(request.email());
+        otpService.issue(request.email(), OtpPurpose.PASSWORD_RESET);
+    }
+
+    /*
+     * 비밀번호 재설정 2단계 - OTP 검증 후 곧바로 새 비밀번호로 교체.
+     */
+    @PostMapping("/password-reset/confirm")
+    public void confirmPasswordReset(@Valid @RequestBody PasswordResetConfirmRequest request) {
+        otpService.verify(request.email(), request.code(), OtpPurpose.PASSWORD_RESET);
+        authService.resetPassword(request.email(), request.newPassword());
     }
 
     @GetMapping("/check")

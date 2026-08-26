@@ -50,6 +50,15 @@ public class AuthService {
     }
 
     /*
+     * 비밀번호 재설정 - OTP 인증(이메일 소유 확인)만으로 현재 비밀번호를 몰라도 새 비밀번호를 설정한다.
+     */
+    @Transactional
+    public void resetPassword(String email, String newPassword) {
+        AuthUser user = requireByEmail(email);
+        authUserRepository.updatePassword(user.id(), passwordEncoder.encode(newPassword));
+    }
+
+    /*
      * user-service의 가입 승인 처리 전용. encodedPassword는 이미 해시된 값이므로 그대로 저장한다.
      */
     @Transactional

@@ -10,6 +10,10 @@ import org.springframework.stereotype.Service;
 import java.security.SecureRandom;
 import java.time.Duration;
 
+/*
+ * 관리자 로그인 2차 인증뿐 아니라 비밀번호 재설정, 회원가입 이메일 인증에도 재사용한다.
+ * 같은 이메일이라도 목적(purpose)마다 Redis 키를 분리해 서로 간섭하지 않는다.
+ */
 @Service
 public class OtpService {
 
@@ -30,13 +34,21 @@ public class OtpService {
     }
 
     public void issue(String email) {
+        issue(email, OtpPurpose.ADMIN_LOGIN);
+    }
+
+    public void issue(String email, OtpPurpose purpose) {
         String code = String.format("%06d", random.nextInt(1_000_000));
-        redisTemplate.opsForValue().set(KEY_PREFIX + email, code, ttl);
-        send(email, code);
+        redisTemplate.opsForValue().set(key(email, purpose), code, ttl);
+        send(email, code, purpose);
     }
 
     public void verify(String email, String code) {
-        String key = KEY_PREFIX + email;
+        verify(email, code, OtpPurpose.ADMIN_LOGIN);
+    }
+
+    public void verify(String email, String code, OtpPurpose purpose) {
+        String key = key(email, purpose);
         String expected = redisTemplate.opsForValue().get(key);
         if (expected == null || !expected.equals(code)) {
             throw new OtpVerificationException();
@@ -44,10 +56,14 @@ public class OtpService {
         redisTemplate.delete(key);
     }
 
-    private void send(String email, String code) {
+    private String key(String email, OtpPurpose purpose) {
+        return KEY_PREFIX + purpose.name() + ":" + email;
+    }
+
+    private void send(String email, String code, OtpPurpose purpose) {
         SimpleMailMessage message = new SimpleMailMessage();
         message.setTo(email);
-        message.setSubject("[GyuBot] 관리자 로그인 인증번호");
+        message.setSubject(purpose.subject());
         message.setText("인증번호는 " + code + " 입니다. " + ttl.toMinutes() + "분 이내에 입력해주세요.");
         mailSender.send(message);
     }
