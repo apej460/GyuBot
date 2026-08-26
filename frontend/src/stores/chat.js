@@ -66,6 +66,11 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
+  async function fetchCitation(documentId) {
+    const { data } = await http.get(`/api/documents/${documentId}/citation`)
+    return data
+  }
+
   return {
     sessions,
     currentSessionId,
@@ -77,5 +82,6 @@ export const useChatStore = defineStore('chat', () => {
     loadSession,
     startNewSession,
     ask,
+    fetchCitation,
   }
 })

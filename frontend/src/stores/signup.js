@@ -7,13 +7,16 @@ export const useSignupStore = defineStore('signup', () => {
   const error = ref('')
   const successMessage = ref('')
 
-  async function submit({ email, name, password, attachment }) {
+  async function submit({ email, name, companyName, department, position, password, attachment }) {
     error.value = ''
     successMessage.value = ''
     try {
       const formData = new FormData()
       formData.append('email', email)
       formData.append('name', name)
+      if (companyName) formData.append('companyName', companyName)
+      if (department) formData.append('department', department)
+      if (position) formData.append('position', position)
       formData.append('password', password)
       formData.append('attachment', attachment)
       await http.post('/api/users/signup-requests', formData)

@@ -34,10 +34,11 @@ async function submitChangePassword() {
     <h1>내 정보</h1>
 
     <el-card v-if="memberStore.me" shadow="never" class="section">
-      <el-descriptions :column="1" border>
+      <el-descriptions title="프로필" :column="1" border>
         <el-descriptions-item label="이름">{{ memberStore.me.name }}</el-descriptions-item>
         <el-descriptions-item label="이메일">{{ memberStore.me.email }}</el-descriptions-item>
-        <el-descriptions-item label="회사 ID">{{ memberStore.me.companyId }}</el-descriptions-item>
+        <el-descriptions-item label="부서">{{ memberStore.me.department || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="직급">{{ memberStore.me.position || '-' }}</el-descriptions-item>
         <el-descriptions-item label="역할">{{ memberStore.me.role }}</el-descriptions-item>
         <el-descriptions-item label="상태">
           <el-tag :type="memberStore.me.status === 'ACTIVE' ? 'success' : 'danger'" size="small">

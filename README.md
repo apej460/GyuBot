@@ -43,6 +43,8 @@ cd frontend && npm install && npm run dev
 Eureka 대시보드: http://localhost:8761
 Mailpit(수신 메일 확인용 SMTP 캐처): http://localhost:8025
 
+**Eureka(discovery-service)가 죽으면 나머지 서비스도 다시 띄워야 합니다.** 각 서비스의 Eureka 클라이언트는 등록/하트비트가 반복 실패하면 재시도를 포기하고, discovery-service가 다시 떠도 스스로 재등록하지 않습니다(장시간 로컬 개발 세션에서 메모리 압박 등으로 discovery-service만 죽는 경우가 실제로 있었음). `curl http://localhost:8761/eureka/apps`로 등록된 인스턴스 수를 확인해 6개(gateway/auth/user/document/search/chat) 미만이면, discovery-service를 먼저 올리고 나머지도 전부 재기동할 것 — 일부만 재기동하면 그 서비스만 복구되고 나머지는 계속 "Connection refused"로 실패합니다.
+
 ## infra/
 
 `docker-compose.yml` 하나로 로컬 개발용 MariaDB(:3306, root/root), Redis(:6379), Mailpit(SMTP :1025 / 웹 UI :8025), Kafka(:9092, KRaft 단일 노드, Zookeeper 없음), MinIO(S3 호환 스토리지, API :9100 / 콘솔 :9101, minioadmin/minioadmin), Elasticsearch(:9200, 단일 노드, `xpack.security.enabled=false`로 로컬 전용 무인증 — 운영에서는 반드시 인증을 켜야 함), Ollama(:11434, search-service의 로컬 임베딩용)를 띄웁니다. 각 서비스의 `application.yml` 기본값이 이 구성과 그대로 맞게 되어 있어 별도 환경변수 설정 없이 바로 연결됩니다.
@@ -58,6 +60,22 @@ docker exec gyubot-ollama ollama pull qwen2.5:7b          # chat-service 답변 
 MinIO 포트가 9000/9001이 아니라 9100/9101인 이유: 로컬에 Jupyter 커널이 떠 있으면 ZMQ 통신 채널 5개(shell/iopub/stdin/control/hb)가 9000~9004 포트를 통째로 점유합니다. 이 충돌 상태에서도 curl 요청은 그럴듯한 응답을 받아 정상처럼 보이지만, AWS SDK 클라이언트는 요청이 무한 대기하다 타임아웃됩니다 — 원인을 못 찾겠다면 `lsof -i -P -n -a -p <pid>`로 포트 점유 프로세스부터 확인할 것.
 
 서비스마다 자기 DB를 따로 쓰는 database-per-service 구조라, `mariadb-init/001-create-databases.sql`이 컨테이너 최초 생성 시 `gyubot_auth`·`gyubot_user`·`gyubot_document`·`gyubot_chat`을 함께 만듭니다. 이미 떠 있는 컨테이너에 새 서비스용 DB를 추가할 땐 init 스크립트가 다시 실행되지 않으니 `docker exec gyubot-mariadb mariadb -uroot -proot -e "CREATE DATABASE IF NOT EXISTS <db명>;"`로 수동 생성하고, 스크립트에도 같이 추가해 둘 것.
+
+## 관리자 콘솔 확장 (2026-08-26)
+
+`docs/울산_2반_서준영_화면설계서.pages` 화면설계서를 기준으로 프론트엔드를 전면 재구성하고, 이를 뒷받침하는 백엔드 기능을 새로 추가했습니다 — 임직원 화면(AI 질의/질의 이력/내 정보)과 완전히 분리된 관리자 콘솔(대시보드/문서 관리/회원 관리/관리자 관리/시스템 관리)이 별도 레이아웃(다크 사이드바)으로 존재합니다.
+
+- **`Role.SUPER_ADMIN` 추가**(auth/user/document/chat 4개 서비스 전부): `JwtAuthenticationFilter.authoritiesFor()`가 SUPER_ADMIN에게 `ROLE_ADMIN`과 `ROLE_SUPER_ADMIN` 권한을 동시에 부여해, 기존 `hasRole("ADMIN")` 규칙을 전혀 안 건드리고도 SUPER_ADMIN이 모든 관리자 API를 그대로 쓸 수 있습니다. SUPER_ADMIN 전용 기능(테넌트 관리, 다른 회사 관리자 조회 등)만 별도로 `hasRole("SUPER_ADMIN")` 또는 서비스 로직에서 `principal.role() == Role.SUPER_ADMIN`으로 구분합니다.
+- **멀티테넌트 `company` 테이블**(auth-service, 신규): 회사명·이메일 도메인·테넌트 코드(`TEN-` + 6자리 난수)·상태(ACTIVE/SUSPENDED)를 관리합니다. `GET/POST /api/companies`는 SUPER_ADMIN 전용(SCR-SYS-001, `/admin/system`). 일반 가입(아래) 시 이메일 도메인으로 회사를 자동 매칭하는 데도 이 테이블을 씁니다.
+- **일반 가입(회사 이메일 도메인 인증) 추가** — 기존 "예외 가입"(관리자 승인 필요, 명함/재직증명서 첨부)과 별개로, 등록된 도메인의 회사 이메일이면 승인 없이 즉시 가입되는 플로우를 새로 만들었습니다: `GET /api/users/signup/email/company?email=`(도메인으로 회사명 미리 확인) → `POST /api/users/signup/email/otp`(OTP 발송) → `POST /api/users/signup/email/complete`(OTP 검증 + 계정 즉시 활성화). `OtpService`를 `OtpPurpose`(ADMIN_LOGIN/PASSWORD_RESET/SIGNUP_EMAIL) enum으로 일반화해, 관리자 로그인 2차 인증과 동일한 Redis 기반 OTP 메커니즘을 3가지 용도로 재사용합니다(용도별로 Redis 키 네임스페이스 분리).
+- **비밀번호 재설정(OTP 기반) 추가**: `POST /api/auth/password-reset/request` → 이메일로 OTP 발송, `POST /api/auth/password-reset/confirm` → 이메일+코드+새 비밀번호를 한 번에 검증·적용(별도의 "인증만" 하는 API가 없어 인증번호 오류도 이 마지막 호출에서 알 수 있습니다 — 프론트는 2단계 화면으로 나눠 보여주지만 실제 검증은 한 번에 일어남).
+- **관리자 계정 관리와 회원 관리 분리**: `ManagerController`(`/api/users/managers`)가 ADMIN/SUPER_ADMIN 계정만 다루고, 기존 `MemberController`(`/api/users`)는 일반 회원만 다룹니다. SUPER_ADMIN이 아닌 ADMIN이 `role: "SUPER_ADMIN"`으로 계정을 만들려 하면 `InsufficientRoleException`(403)으로 막습니다 — 코드 리뷰 중 자체 발견한 권한 상승 허점을 커밋 전에 막은 것.
+- **문서 버전 메타데이터 추가**(document-service): `version`/`category`/`effectiveDate`/`revisionDate` 컬럼을 `document` 테이블에 추가. 상태(`ACTIVE`/`UPCOMING`)는 **DB에 저장하지 않고** `DocumentResponse.statusOf()`에서 매번 `effectiveDate`와 오늘 날짜를 비교해 계산합니다 — 상태와 날짜가 어긋날 여지를 없애기 위한 선택.
+- **문서 근거 조회 API 신설** — 챗봇 답변의 근거 문서 카드(AnswerSourceResponse)에는 `documentId`만 있고 버전/분류/시행일 같은 메타데이터가 없어서, 임직원이 답변 화면에서 이 정보를 볼 방법이 없었습니다. 기존 문서 상세(`GET /api/documents/{id}`)는 관리자 전용이라 그대로 열 수 없었고, companyId 확인도 없어 그대로 열면 다른 회사 문서까지 보일 위험이 있었습니다. 그래서 `GET /api/documents/{id}/citation`을 새로 추가했습니다 — 로그인만 있으면 호출 가능하지만 `DocumentService.requireByIdForCompany()`로 요청자의 companyId와 문서의 companyId를 반드시 비교해, 다른 회사 문서는 id를 안다고 해도 404로 막습니다(다운로드 API와 동일한 패턴, REQ-F-018).
+- **운영 대시보드 통계**: 전용 집계 서비스 없이 각 서비스에 `/stats` 엔드포인트를 하나씩 추가하는 방식을 택했습니다 — `GET /api/users/stats`(전체 회원 수), `GET /api/documents/stats`(등록 문서 수), `GET /api/chat/stats`(금일 질의 수·미답변 질문 수·최근 7일 질의량·자주 검색된 키워드 top4). 키워드 추출(`KeywordExtractor`)은 형태소 분석기 없이 공백/구두점 기준 단어 빈도 계산 + 소규모 한국어 불용어 목록만 쓰는 단순한 방식입니다 — "요즘 뭘 많이 물어보는지" 정도의 대시보드 위젯 용도로는 이 정도로 충분하다고 판단했습니다.
+- **`api-gateway` 라우트 누락 버그**: `CompanyController`(`/api/companies/**`)를 auth-service에 추가하면서 게이트웨이 `application.yml`에 대응 라우트 추가를 빠뜨려, 프론트에서 시스템 관리 화면 진입 시 404가 났습니다. `auth-service-companies` 라우트(`Path=/api/companies/**` → `lb://auth-service`)를 추가해 해결 — **새 컨트롤러를 만들 때마다 게이트웨이 라우트도 같이 추가했는지 체크리스트로 확인할 것.**
+- 프론트엔드는 라우트 메타(`meta.requiresAdmin`/`meta.requiresSuperAdmin`)로 레이아웃을 3단계로 나눕니다: 로그인 전(카드만), 임직원(`EmployeeShell` — 밝은 헤더), 관리자(`AdminShell` — 다크 사이드바, "시스템 관리" 메뉴는 SUPER_ADMIN에게만 표시). 신규 Pinia 스토어: `emailSignup.js`/`manager.js`/`company.js`/`passwordReset.js`/`adminStats.js`/`adminDocuments.js`.
+- **검증 완료(2026-08-26, 실제 인프라 + 실제 Chrome 브라우저)**: superadmin OTP 로그인 → 대시보드 실데이터(회원/문서/질의 수, 7일 차트, 키워드) 확인 → 시스템 관리에서 회사 목록 조회·신규 회사 등록 → 관리자 관리에서 목록·추가 다이얼로그 확인 → 문서 관리에서 버전/분류/시행일 포함 문서 등록 후 목록 반영·삭제까지 확인 → 회원 관리(활성 회원/가입 승인 대기 탭) 확인 → 임직원 로그인 → AI 질의로 실제 RAG 답변 수신 → 근거 문서 카드 클릭 시 우측 드로어에 버전/분류/시행일/상태+발췌+다운로드 버튼 표시(새 `/citation` API로 확인) → 질의 이력 검색/날짜 필터 → 내 정보 화면 → 비밀번호 재설정 마법사(이메일 인증 → 새 비밀번호 → 완료, 이후 원래 비밀번호로 재복원) → 일반 이메일 가입 마법사(도메인 인증 → OTP → 프로필 입력 → 즉시 가입 완료 → 승인 대기 없이 바로 로그인 성공)까지 전부 확인.
 
 ## api-gateway 참고
 
@@ -80,24 +98,34 @@ MinIO 포트가 9000/9001이 아니라 9100/9101인 이유: 로컬에 Jupyter �
 
 ## frontend 화면
 
-- `/login` — 이메일/PW, 관리자면 OTP 입력 단계로 전환
-- `/` — 로그인 정보 표시, 내 정보·회원 관리(관리자만) 링크, 로그아웃 (`meta.requiresAuth`)
-- `/mypage` — 내 정보 조회 + 비밀번호 변경 (`meta.requiresAuth`)
-- `/signup` — 회사 이메일이 없는 사용자의 예외 가입 신청 (이메일/이름/비밀번호 + 명함·재직증명서 파일), 인증 불필요
-- `/admin/members` — 회원 목록 + 상태 변경(정지/활성화) 버튼, 관리자만 (`meta.requiresAuth`, `meta.requiresAdmin` — 라우터 가드에서 `auth.user.role !== 'ADMIN'`이면 홈으로 리다이렉트, 백엔드도 동일하게 403으로 막으므로 이중 방어)
-- `/admin/signup-requests` — 대기 중인 가입 신청 목록, 첨부파일 열람, 승인/반려(반려 사유 입력) — 관리자만
-- `/chat` (`/chat/:id`) — AI 질의. 질문을 보내면 chat-service가 답변과 근거 문서를 함께 반환하고, 채팅 버블 아래에 근거 문서 파일명·발췌와 함께 **"원문 다운로드"** 링크(`/api/documents/{documentId}/download`로의 plain `<a target="_blank">`, 가입 신청 첨부파일 열람과 같은 패턴 — fetch 없이 쿠키가 그대로 실려 나가서 document-service의 인증을 그대로 통과함)를 보여줍니다. 새 질문이 처음 성공하면 URL이 `/chat/{생성된 sessionId}`로 바뀌어(router.replace) 새로고침해도 같은 대화가 이어집니다.
-- `/chat/history` — 질의 이력. 내 대화방 목록(제목+시각)에서 클릭하면 해당 대화방의 전체 메시지+근거를 `/chat/{id}`에서 이어서 볼 수 있습니다.
+화면설계서(`docs/울산_2반_서준영_화면설계서.pages`) 기준으로 임직원 화면과 관리자 콘솔을 완전히 분리했습니다. `router/index.js`가 `meta.requiresAdmin`/`meta.requiresSuperAdmin`으로 접근을 가드하고, `App.vue`가 같은 메타로 레이아웃(`EmployeeShell`/`AdminShell`/로그인 카드)을 고릅니다.
 
-개발 서버는 `vite.config.js`의 `server.proxy`로 `/api/*` 전체를 api-gateway(:8080) 하나로만 프록시합니다 — 서비스별 포트를 프론트가 알 필요 없이, 실제 라우팅은 게이트웨이가 맡습니다. 쿠키는 Vite가 프록시해주는 덕에 브라우저 입장에서는 항상 동일 출처(localhost:5173)라서 CORS 설정이 필요 없습니다.
+**인증**
+- `/login` — 임직원 로그인, 관리자는 `/admin/login`으로 별도 진입점을 씁니다.
+- `/admin/login` — 관리자 로그인(다크 테마), 로그인 성공 시 OTP 2차 인증 단계로 전환.
+- `/reset-password` — 비밀번호 재설정 마법사(이메일 인증 → 새 비밀번호 → 완료).
+- `/signup/email` — 회사 이메일 도메인 인증으로 즉시 가입(승인 불필요): 이메일+OTP+비밀번호 → 이름/소속회사(읽기전용)/부서/직급 → 완료.
+- `/signup/document` — 회사 이메일이 없는 사용자의 예외 가입 신청(이메일/이름/회사명/부서/직급/비밀번호 + 명함·재직증명서 첨부), 관리자 승인 필요.
 
-- 상태 관리: `src/stores/auth.js`(로그인 세션) / `src/stores/member.js`(프로필·회원 관리) / `src/stores/signup.js`(가입 신청 제출 + 관리자 승인/반려) / `src/stores/chat.js`(질문 전송·대화 이력)
+**임직원** (`EmployeeShell`, `meta.requiresAuth`)
+- `/chat` (`/chat/:id`) — AI 질의. 대화가 없으면 예시 질문 칩을 보여주고, 답변에는 "근거 문서 N개 문서에서 답변을 확인했어요" 문구와 함께 클릭 가능한 근거 문서 카드가 붙습니다. 카드를 클릭하면 우측 드로어가 열려 `GET /api/documents/{id}/citation`으로 버전/분류/시행일/개정일/상태와 발췌, "원본 문서 다운로드" 버튼을 보여줍니다.
+- `/history` — 질의 이력. 질문 검색 + 날짜 범위 필터(클라이언트 사이드).
+- `/mypage` — 내 정보(이름/이메일/부서/직급/역할/상태) + 비밀번호 변경.
+
+**관리자 콘솔** (`AdminShell`, `meta.requiresAuth` + `requiresAdmin`/`requiresSuperAdmin`)
+- `/admin/dashboard` — 통계 카드 4개(전체 회원/등록 문서/금일 질의/미답변 질문) + 최근 7일 질의량(CSS 바 차트, 외부 차트 라이브러리 없이 직접 구현) + 자주 검색된 키워드 목록.
+- `/admin/documents`, `/admin/documents/new` — 문서 목록(검색, 버전/분류/시행일/상태) 및 등록(메타데이터 + 파일 업로드).
+- `/admin/members` — 활성 회원 탭 + 가입 승인 대기 탭을 하나로 합친 화면(기존 별도 화면 두 개를 병합).
+- `/admin/managers` — 관리자 계정 목록 + 추가(SUPER_ADMIN만 SUPER_ADMIN 역할 부여 가능).
+- `/admin/system` — **SUPER_ADMIN 전용**. 회사(테넌트) 목록 조회 + 등록.
+
+개발 서버는 `vite.config.js`의 `server.proxy`로 `/api/*` 전체를 api-gateway(:8080) 하나로만 프록시합니다 — 서비스별 포트를 프론트가 알 필요 없이, 실제 라우팅은 게이트웨이가 맡습니다. 쿠키는 Vite가 프록시해주는 덕에 브라우저 입장에서는 항상 동일 출처라서 CORS 설정이 필요 없습니다.
+
+- 상태 관리: `src/stores/auth.js`(로그인 세션) / `src/stores/member.js`(프로필·회원 관리) / `src/stores/signup.js`(예외 가입 제출 + 관리자 승인/반려) / `src/stores/emailSignup.js`(일반 가입) / `src/stores/passwordReset.js` / `src/stores/manager.js` / `src/stores/company.js` / `src/stores/adminStats.js` / `src/stores/adminDocuments.js` / `src/stores/chat.js`(질문 전송·대화 이력·근거 문서 조회)
 - API 클라이언트: `src/api/http.js` (axios, `withCredentials: true`)
-- **UI를 element-plus로 다듬었습니다(2026-08-26)** — 원래 의존성만 있고 등록은 안 돼 있던 걸 `main.js`에서 `app.use(ElementPlus)`로 실제 적용. `App.vue`가 로그인 여부(`route.meta.requiresAuth`)로 두 가지 모드를 갖습니다: 로그인 화면(`/login`, `/signup`)은 배경 위에 카드 하나만 떠 있는 형태, 그 외 모든 화면은 상단 헤더(로고+가로 메뉴+사용자 정보+로그아웃)를 공통으로 두르는 셸(shell) 레이아웃입니다. 각 화면에 있던 개별 "← 홈" 뒤로가기 링크는 이 공통 헤더로 대체되어 전부 지웠습니다. 아이콘 패키지(`@element-plus/icons-vue`)는 추가하지 않았습니다 — 새 의존성 설치 없이 el-card/el-table/el-form/el-tag/el-descriptions/el-empty 같은 컴포넌트만으로 충분히 정돈됐습니다.
-- 검증 완료(2026-08-25, 실제 Chrome 브라우저로 확인 — claude-in-chrome): employee 로그인 → 홈 화면 정보 표시 → 새로고침해도 세션 유지 → 로그아웃 → admin 로그인 → OTP 입력 화면 전환 → Mailpit에서 실제 수신한 인증번호 입력 → role=ADMIN으로 홈 진입 → 내 정보 화면에서 잘못된 현재 비밀번호로 변경 시도 시 에러 표시 → 올바른 비밀번호로 변경 성공 표시 후 원래 비밀번호로 재변경까지 실제 폼 입력으로 확인 → 회원 관리 화면에서 상태 뱃지·버튼으로 정지/활성화 토글 확인 → employee 계정으로는 회원 관리 링크가 아예 안 보이고 URL 직접 접근 시에도 홈으로 리다이렉트되는 것까지 확인 → `/signup`에서 실제 파일(PNG) 첨부해 가입 신청 제출 → `/admin/signup-requests`에서 첨부파일 링크로 열람 → 반려(사유 입력) 후 Mailpit에서 반려 메일 확인 → 다시 신청 제출 후 승인 버튼 클릭 → 새 계정으로 실제 로그인 성공까지 전부 폼 조작으로 확인. 콘솔 에러 없음.
-- 검증 완료(2026-08-26, `/chat` 화면, 실제 Chrome 브라우저로 확인): employee로 로그인해 "연차 휴가는 며칠까지 쓸 수 있어?" 질문 → 몇 초 뒤 정확한 한국어 답변과 근거 문서(파일명+발췌)가 채팅 버블로 표시 → URL이 `/chat/3`으로 자동 전환 → `/chat/history`에서 방금 만든 대화방이 목록에 나타남 → 클릭해서 들어가면 전체 대화가 그대로 복원됨 → "새 대화"로 빈 화면 복귀 확인. 콘솔 에러 없음.
-- 검증 완료(2026-08-26, element-plus 적용 후 재검증, 실제 Chrome 브라우저): 로그인 카드·OTP 단계 전환, 관리자 대시보드(그라데이션 환영 카드 + 바로가기 타일, 관리자 전용 타일은 강조색), 회원 관리 테이블(상태 뱃지), 가입 승인(el-empty 빈 상태), 내 정보(el-descriptions), 질의 이력(테이블), AI 질의(버블+로딩 점 애니메이션+근거 문서+원문 다운로드 링크)까지 전부 화면 확인. 도중 상태 뱃지가 안 보이는 것처럼 보인 경우가 몇 번 있었는데, 전부 스크린샷 타이밍/줌 영역 문제였을 뿐 실제로는 `el-tag`의 마운트 트랜지션(zoom-in)이 끝난 뒤엔 정상 렌더링됨을 `getBoundingClientRect()`로 재확인 — 진짜 버그 아님.
-- 브라우저 자동화 테스트 팁: 이 앱을 claude-in-chrome으로 조작할 때 픽셀 좌표 클릭은 HiDPI 스크린샷 배율 때문에 가끔 엉뚱한 곳을 클릭합니다(입력 필드가 안 채워지거나 클릭이 씹힘) — `read_page`로 얻은 요소 ref로 클릭·입력하는 편이 훨씬 안정적입니다. 파일 입력은 `file_upload` 도구를 쓰고, 세션에 공유된 경로(스크래치패드 등)의 파일만 업로드할 수 있습니다.
+- UI는 element-plus로 구성되어 있습니다(`main.js`에서 `app.use(ElementPlus)`). 새 아이콘 패키지 없이 el-card/el-table/el-form/el-tag/el-descriptions/el-drawer/el-dialog/el-tabs 등 기본 컴포넌트만으로 화면을 구성했습니다.
+- **검증 완료(2026-08-26, 관리자 콘솔 확장 후 재검증, 실제 Chrome 브라우저)**: 위 "관리자 콘솔 확장" 절 참고.
+- **브라우저 자동화 테스트 팁**: claude-in-chrome으로 이 앱을 조작할 때 픽셀 좌표 클릭은 페이지가 미세하게 리플로우(레이아웃 shift)될 때마다 어긋나기 쉽습니다(입력 필드가 안 채워지거나 클릭이 씹힘, 매 상호작용 전 새 스크린샷으로 좌표를 다시 잡아야 함). `read_page`/`find`로 얻은 요소 ref로 클릭·입력하는 편이 대체로 더 안정적이지만, **이번 세션에서는 특정 `native-type="submit"` el-button에서 ref 클릭도 좌표 클릭도 전혀 반응하지 않는 경우(네트워크 요청 자체가 안 나감, 콘솔 에러도 없음)가 있었습니다** — `javascript_tool`로 `document.querySelectorAll('button')`에서 텍스트로 버튼을 찾아 `.click()`을 직접 호출하니 즉시 정상 동작했습니다. 커스텀 컴포넌트 버튼이 사람 조작을 흉내 낸 합성 클릭에 반응하지 않을 때는 이 방법으로 우회할 것 — 실제 앱 버그가 아니라 자동화 도구의 클릭 전달 문제였음을 `.click()` 직접 호출 성공으로 확인했습니다. 파일 입력은 `file_upload` 도구를 쓰고, 세션에 공유된 경로(스크래치패드 등)의 파일만 업로드할 수 있습니다.
 - 백엔드 서비스를 재시작한 뒤 로그인이 브라우저에서만 500으로 실패하고 curl로는 잘 되는 경우가 있었습니다 — 오래 떠 있던 auth-service/user-service JVM이 반복적인 요청 처리 후 상태가 꼬이는 것으로 보이며, 원인을 더 파기보다는 **서비스를 재기동하는 쪽이 빠르고 확실**했습니다 (Vite 재시작은 무관했음). 로컬 개발 중 이런 증상이 보이면 먼저 의심할 것.
 
 ## user-service 참고
