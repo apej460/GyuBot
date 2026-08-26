@@ -20,8 +20,8 @@ public class SecurityConfig {
 
     /*
      * 문서 관리(등록/목록/상세/수정/삭제)는 설계상 관리자 전용 메뉴라 ADMIN으로 막는다.
-     * 다운로드만은 예외 — 챗봇 답변의 "원문 확인"에서 임직원도 호출하므로 로그인만 요구한다
-     * (회사가 다른 문서는 DocumentService.download()가 companyId로 별도 확인).
+     * 다운로드·근거 문서 조회(citation)만은 예외 — 챗봇 답변의 "원문 확인"에서 임직원도
+     * 호출하므로 로그인만 요구한다 (회사가 다른 문서는 companyId로 별도 확인).
      */
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
@@ -36,6 +36,7 @@ public class SecurityConfig {
                         // /internal/**은 JWT가 아니라 X-Internal-Token으로 컨트롤러에서 직접 인증한다.
                         .requestMatchers("/internal/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/documents/*/download").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/documents/*/citation").authenticated()
                         .requestMatchers("/api/documents/**").hasRole("ADMIN")
                         .anyRequest().authenticated())
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);

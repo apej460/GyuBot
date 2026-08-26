@@ -97,6 +97,15 @@ public class DocumentController {
     }
 
     /*
+     * 임직원·관리자 공통 - 챗봇 답변의 근거 문서 카드에 표시할 문서 메타데이터 (본인 회사 소속만)
+     */
+    @GetMapping("/{id}/citation")
+    public DocumentResponse citation(Authentication authentication, @PathVariable Long id) {
+        Long companyId = principalOf(authentication).companyId();
+        return DocumentResponse.from(documentService.requireByIdForCompany(id, companyId));
+    }
+
+    /*
      * 임직원·관리자 공통 - 원본 파일 다운로드 (챗봇 답변의 "원문 확인"에서도 호출됨)
      */
     @GetMapping("/{id}/download")

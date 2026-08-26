@@ -85,11 +85,21 @@ public class DocumentService {
      * 다른 회사 문서를 id만으로 접근하지 못하도록 companyId를 반드시 확인한다 (REQ-F-018).
      */
     public DownloadedFile download(Long id, Long companyId) {
+        Document document = requireByIdForCompany(id, companyId);
+        return download(document);
+    }
+
+    /*
+     * 챗봇 답변의 근거 문서 카드(버전/시행일 등 메타데이터)를 임직원도 조회할 수 있어야 해서,
+     * 관리자 전용인 detail()과 별도로 companyId를 확인하는 조회를 둔다.
+     */
+    @Transactional(readOnly = true)
+    public Document requireByIdForCompany(Long id, Long companyId) {
         Document document = requireById(id);
         if (!document.companyId().equals(companyId)) {
             throw new DocumentNotFoundException();
         }
-        return download(document);
+        return document;
     }
 
     /*
