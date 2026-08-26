@@ -77,12 +77,16 @@ MinIO 포트가 9000/9001이 아니라 9100/9101인 이유: 로컬에 Jupyter �
 - `/signup` — 회사 이메일이 없는 사용자의 예외 가입 신청 (이메일/이름/비밀번호 + 명함·재직증명서 파일), 인증 불필요
 - `/admin/members` — 회원 목록 + 상태 변경(정지/활성화) 버튼, 관리자만 (`meta.requiresAuth`, `meta.requiresAdmin` — 라우터 가드에서 `auth.user.role !== 'ADMIN'`이면 홈으로 리다이렉트, 백엔드도 동일하게 403으로 막으므로 이중 방어)
 - `/admin/signup-requests` — 대기 중인 가입 신청 목록, 첨부파일 열람, 승인/반려(반려 사유 입력) — 관리자만
+- `/chat` (`/chat/:id`) — AI 질의. 질문을 보내면 chat-service가 답변과 근거 문서를 함께 반환하고, 채팅 버블 아래에 근거 문서 파일명·발췌를 보여줍니다. 새 질문이 처음 성공하면 URL이 `/chat/{생성된 sessionId}`로 바뀌어(router.replace) 새로고침해도 같은 대화가 이어집니다.
+- `/chat/history` — 질의 이력. 내 대화방 목록(제목+시각)에서 클릭하면 해당 대화방의 전체 메시지+근거를 `/chat/{id}`에서 이어서 볼 수 있습니다.
 
-개발 서버는 `vite.config.js`의 `server.proxy`로 `/api/auth/*`는 auth-service(:8081), `/api/users/*`는 user-service(:8082)로 각각 프록시합니다. 두 서비스 모두 `/api/...` 프리픽스를 쓰기 때문에 하나의 프록시 규칙으로 묶을 수 없어서 경로별로 나눴습니다 (api-gateway 라우팅이 갖춰지면 하나의 타겟으로 합치면 됨). 쿠키는 Vite가 프록시해주는 덕에 브라우저 입장에서는 항상 동일 출처(localhost:5173)라서 CORS 설정이 필요 없습니다.
+개발 서버는 `vite.config.js`의 `server.proxy`로 `/api/auth/*`는 auth-service(:8081), `/api/users/*`는 user-service(:8082), `/api/chat/*`는 chat-service(:8085)로 각각 프록시합니다. 겹치는 서비스가 없어서 프록시 규칙을 경로별로 나눴습니다 (api-gateway 라우팅이 갖춰지면 하나의 타겟으로 합치면 됨). 쿠키는 Vite가 프록시해주는 덕에 브라우저 입장에서는 항상 동일 출처(localhost:5173)라서 CORS 설정이 필요 없습니다.
 
-- 상태 관리: `src/stores/auth.js`(로그인 세션) / `src/stores/member.js`(프로필·회원 관리) / `src/stores/signup.js`(가입 신청 제출 + 관리자 승인/반려)
+- 상태 관리: `src/stores/auth.js`(로그인 세션) / `src/stores/member.js`(프로필·회원 관리) / `src/stores/signup.js`(가입 신청 제출 + 관리자 승인/반려) / `src/stores/chat.js`(질문 전송·대화 이력)
 - API 클라이언트: `src/api/http.js` (axios, `withCredentials: true`)
+- UI 라이브러리(element-plus)는 의존성엔 있지만 아직 `app.use()`로 등록/사용하지 않았습니다 — 지금까지 모든 화면이 순수 HTML+scoped CSS로 되어 있어 그 스타일을 그대로 따랐습니다.
 - 검증 완료(2026-08-25, 실제 Chrome 브라우저로 확인 — claude-in-chrome): employee 로그인 → 홈 화면 정보 표시 → 새로고침해도 세션 유지 → 로그아웃 → admin 로그인 → OTP 입력 화면 전환 → Mailpit에서 실제 수신한 인증번호 입력 → role=ADMIN으로 홈 진입 → 내 정보 화면에서 잘못된 현재 비밀번호로 변경 시도 시 에러 표시 → 올바른 비밀번호로 변경 성공 표시 후 원래 비밀번호로 재변경까지 실제 폼 입력으로 확인 → 회원 관리 화면에서 상태 뱃지·버튼으로 정지/활성화 토글 확인 → employee 계정으로는 회원 관리 링크가 아예 안 보이고 URL 직접 접근 시에도 홈으로 리다이렉트되는 것까지 확인 → `/signup`에서 실제 파일(PNG) 첨부해 가입 신청 제출 → `/admin/signup-requests`에서 첨부파일 링크로 열람 → 반려(사유 입력) 후 Mailpit에서 반려 메일 확인 → 다시 신청 제출 후 승인 버튼 클릭 → 새 계정으로 실제 로그인 성공까지 전부 폼 조작으로 확인. 콘솔 에러 없음.
+- 검증 완료(2026-08-26, `/chat` 화면, 실제 Chrome 브라우저로 확인): employee로 로그인해 "연차 휴가는 며칠까지 쓸 수 있어?" 질문 → 몇 초 뒤 정확한 한국어 답변과 근거 문서(파일명+발췌)가 채팅 버블로 표시 → URL이 `/chat/3`으로 자동 전환 → `/chat/history`에서 방금 만든 대화방이 목록에 나타남 → 클릭해서 들어가면 전체 대화가 그대로 복원됨 → "새 대화"로 빈 화면 복귀 확인. 콘솔 에러 없음.
 - 브라우저 자동화 테스트 팁: 이 앱을 claude-in-chrome으로 조작할 때 픽셀 좌표 클릭은 HiDPI 스크린샷 배율 때문에 가끔 엉뚱한 곳을 클릭합니다(입력 필드가 안 채워지거나 클릭이 씹힘) — `read_page`로 얻은 요소 ref로 클릭·입력하는 편이 훨씬 안정적입니다. 파일 입력은 `file_upload` 도구를 쓰고, 세션에 공유된 경로(스크래치패드 등)의 파일만 업로드할 수 있습니다.
 - 백엔드 서비스를 재시작한 뒤 로그인이 브라우저에서만 500으로 실패하고 curl로는 잘 되는 경우가 있었습니다 — 오래 떠 있던 auth-service/user-service JVM이 반복적인 요청 처리 후 상태가 꼬이는 것으로 보이며, 원인을 더 파기보다는 **서비스를 재기동하는 쪽이 빠르고 확실**했습니다 (Vite 재시작은 무관했음). 로컬 개발 중 이런 증상이 보이면 먼저 의심할 것.
 

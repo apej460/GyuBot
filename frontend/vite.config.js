@@ -26,6 +26,10 @@ export default defineConfig({
         target: 'http://localhost:8082',
         changeOrigin: true,
       },
+      '/api/chat': {
+        target: 'http://localhost:8085',
+        changeOrigin: true,
+      },
     },
   },
 })

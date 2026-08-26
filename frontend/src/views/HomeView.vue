@@ -22,6 +22,7 @@ async function handleLogout() {
       <li>role: {{ auth.user?.role }}</li>
     </ul>
     <nav>
+      <RouterLink to="/chat">AI 질의</RouterLink>
       <RouterLink to="/mypage">내 정보</RouterLink>
       <RouterLink v-if="auth.user?.role === 'ADMIN'" to="/admin/members">회원 관리</RouterLink>
       <RouterLink v-if="auth.user?.role === 'ADMIN'" to="/admin/signup-requests">가입 승인</RouterLink>
