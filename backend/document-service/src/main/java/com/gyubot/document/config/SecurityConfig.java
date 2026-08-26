@@ -31,6 +31,8 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/actuator/**", "/error", "/swagger-ui/**", "/v3/api-docs/**")
                         .permitAll()
+                        // /internal/**은 JWT가 아니라 X-Internal-Token으로 컨트롤러에서 직접 인증한다.
+                        .requestMatchers("/internal/**").permitAll()
                         .requestMatchers("/api/documents/**").hasRole("ADMIN")
                         .anyRequest().authenticated())
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);

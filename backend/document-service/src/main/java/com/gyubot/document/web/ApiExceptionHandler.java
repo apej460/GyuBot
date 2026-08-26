@@ -1,6 +1,7 @@
 package com.gyubot.document.web;
 
 import com.gyubot.document.exception.DocumentNotFoundException;
+import com.gyubot.document.exception.InternalAuthException;
 import com.gyubot.document.exception.InvalidDocumentFileException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -29,6 +30,12 @@ public class ApiExceptionHandler {
     ResponseEntity<Map<String, String>> tooLarge(MaxUploadSizeExceededException e) {
         return ResponseEntity.badRequest()
                 .body(Map.of("code", "INVALID_DOCUMENT_FILE", "message", "파일 크기는 50MB를 초과할 수 없습니다."));
+    }
+
+    @ExceptionHandler(InternalAuthException.class)
+    ResponseEntity<Map<String, String>> internalAuth(InternalAuthException e) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(Map.of("code", "INTERNAL_AUTH_FAILED", "message", e.getMessage()));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

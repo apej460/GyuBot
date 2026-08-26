@@ -42,6 +42,9 @@ app:
   jwt:
     secret: ${JWT_SECRET:change-this-development-secret-key-at-least-32-characters}
     issuer: ${JWT_ISSUER:gyubot-auth-service}
+  internal:
+    # 서비스 간 내부 API 보호용 공유 시크릿. 다른 서비스와 반드시 같은 값이어야 함.
+    token: ${INTERNAL_API_TOKEN:change-this-internal-token}
   kafka:
     document-uploaded-topic: ${DOCUMENT_UPLOADED_TOPIC:document.uploaded}
     document-deleted-topic: ${DOCUMENT_DELETED_TOPIC:document.deleted}
