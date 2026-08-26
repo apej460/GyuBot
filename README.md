@@ -16,7 +16,7 @@ GyuBot/
 │   ├── user-service/      회원·마이페이지 (:8082)
 │   ├── document-service/  업로드·S3 저장 (:8083)
 │   ├── search-service/    Chunking·하이브리드 검색 (:8084)
-│   └── chat-service/      (예정) RAG 대화 처리
+│   └── chat-service/      RAG 대화 처리 (:8085)
 ├── infra/                 로컬 실행용 docker-compose (Kafka, Redis, DB 등)
 └── docs/                  설계 발표자료, 요구사항정의서 등
 ```
@@ -49,14 +49,15 @@ Mailpit(수신 메일 확인용 SMTP 캐처): http://localhost:8025
 
 Elasticsearch 이미지 버전은 Boot가 관리하는 `co.elastic.clients:elasticsearch-java` 클라이언트 버전과 반드시 맞춰야 합니다(현재 9.4.5) — 버전이 안 맞으면 클라이언트 호출이 이상하게 실패할 수 있습니다.
 
-Ollama는 컨테이너만 띄운다고 끝이 아니라 임베딩 모델을 한 번 받아둬야 합니다(최초 1회, 약 274MB):
+Ollama는 컨테이너만 띄운다고 끝이 아니라 필요한 모델을 미리 받아둬야 합니다(최초 1회):
 ```bash
-docker exec gyubot-ollama ollama pull nomic-embed-text
+docker exec gyubot-ollama ollama pull nomic-embed-text   # search-service 임베딩용, 약 274MB
+docker exec gyubot-ollama ollama pull qwen2.5:7b          # chat-service 답변 생성용, 약 4.7GB
 ```
 
 MinIO 포트가 9000/9001이 아니라 9100/9101인 이유: 로컬에 Jupyter 커널이 떠 있으면 ZMQ 통신 채널 5개(shell/iopub/stdin/control/hb)가 9000~9004 포트를 통째로 점유합니다. 이 충돌 상태에서도 curl 요청은 그럴듯한 응답을 받아 정상처럼 보이지만, AWS SDK 클라이언트는 요청이 무한 대기하다 타임아웃됩니다 — 원인을 못 찾겠다면 `lsof -i -P -n -a -p <pid>`로 포트 점유 프로세스부터 확인할 것.
 
-서비스마다 자기 DB를 따로 쓰는 database-per-service 구조라, `mariadb-init/001-create-databases.sql`이 컨테이너 최초 생성 시 `gyubot_auth`·`gyubot_user`·`gyubot_document`를 함께 만듭니다. 이미 떠 있는 컨테이너에 새 서비스용 DB를 추가할 땐 init 스크립트가 다시 실행되지 않으니 `docker exec gyubot-mariadb mariadb -uroot -proot -e "CREATE DATABASE IF NOT EXISTS <db명>;"`로 수동 생성하고, 스크립트에도 같이 추가해 둘 것.
+서비스마다 자기 DB를 따로 쓰는 database-per-service 구조라, `mariadb-init/001-create-databases.sql`이 컨테이너 최초 생성 시 `gyubot_auth`·`gyubot_user`·`gyubot_document`·`gyubot_chat`을 함께 만듭니다. 이미 떠 있는 컨테이너에 새 서비스용 DB를 추가할 땐 init 스크립트가 다시 실행되지 않으니 `docker exec gyubot-mariadb mariadb -uroot -proot -e "CREATE DATABASE IF NOT EXISTS <db명>;"`로 수동 생성하고, 스크립트에도 같이 추가해 둘 것.
 
 ## auth-service 참고
 
@@ -112,12 +113,21 @@ MinIO 포트가 9000/9001이 아니라 9100/9101인 이유: 로컬에 Jupyter �
 - **임베딩 결정**: OpenAI API 키가 아직 없어서, 로컬 Docker 컨테이너로 띄운 **Ollama + nomic-embed-text**(768차원, 무료)로 임베딩을 생성합니다. `EmbeddingClient` 인터페이스 뒤에 `OllamaEmbeddingClient` 구현체 하나만 두는 구조라, 나중에 OpenAI API 키가 생기면 구현체를 하나 더 추가하고 활성 빈만 바꾸면 됩니다(Chunking·색인·검색 코드는 인터페이스만 참조). 다만 임베딩 모델을 바꾸면 벡터 차원이 달라질 수 있어 ES 인덱스도 새로 만들어야 합니다.
 - **파이프라인**(`event/DocumentEventListener` → `index/DocumentChunkIndexer`): `document.uploaded` 수신 → `client/DocumentServiceClient`가 document-service의 내부 API(`X-Internal-Token`)로 원본 바이트를 받아옴 → `extract/TextExtractor`(Apache PDFBox)로 텍스트 추출 → `chunk/TextChunker`가 문단 단위로 묶어 800자 안팎(100자 겹침)으로 분할 → 청크마다 Ollama로 임베딩 생성 → ES에 Bulk 색인(문서 ID `{documentId}-{chunkIndex}`, 재색인 시 먼저 기존 청크를 지워 개수가 줄어도 오래된 청크가 안 남게 함). `document.deleted` 수신 시엔 해당 documentId의 청크를 전부 delete-by-query로 제거합니다.
 - **HWP는 아직 지원하지 않습니다** — 자바 생태계에 성숙한 HWP 파서가 마땅치 않아서, PDF만 텍스트를 추출합니다. HWP 업로드 이벤트는 `UnsupportedFileFormatException`으로 걸러 로그만 남기고 색인을 건너뜁니다(document-service의 원본 저장 자체는 정상 — 검색 대상에서만 빠짐).
-- **검색**: `HybridSearchService`가 BM25 검색과 kNN 벡터 검색을 각각 실행한 뒤 [Reciprocal Rank Fusion](https://www.elastic.co/guide/en/elasticsearch/reference/current/rrf.html)으로 순위를 합칩니다(ES의 `retriever.rrf` API 대신 직접 구현 — 이해·검증이 쉬워서 이 방식을 택함, 공식은 동일). `GET /internal/search?companyId=&query=&topK=`로 노출되며, chat-service가 아직 없어 지금은 curl로 직접 검증합니다. companyId로 필터링해 테넌트 격리(REQ-F-018)를 지킵니다.
+- **검색**: `HybridSearchService`가 BM25 검색과 kNN 벡터 검색을 각각 실행한 뒤 [Reciprocal Rank Fusion](https://www.elastic.co/guide/en/elasticsearch/reference/current/rrf.html)으로 순위를 합칩니다(ES의 `retriever.rrf` API 대신 직접 구현 — 이해·검증이 쉬워서 이 방식을 택함, 공식은 동일). `GET /internal/search?companyId=&query=&topK=`로 노출되며, chat-service가 RAG 답변을 만들 때 이 API를 호출합니다. companyId로 필터링해 테넌트 격리(REQ-F-018)를 지킵니다.
 - **의존성**: `spring-boot-starter-elasticsearch`(co.elastic.clients 기반 `ElasticsearchClient` 자동 구성 — Spring Data의 리포지토리 추상화는 쓰지 않음, kNN+BM25를 섞은 커스텀 쿼리를 직접 짜야 해서 저수준 클라이언트가 더 맞음), `spring-boot-starter-kafka`, `org.apache.pdfbox:pdfbox`.
 - Elasticsearch는 **Boot가 헬스 인디케이터를 기본 제공**합니다 (document-service의 Kafka와 달리 별도로 만들 필요 없었음). Kafka는 여전히 Boot 4.1에서 기본 제공되지 않아 `health/KafkaHealthIndicator.java`를 document-service와 동일하게 추가했습니다.
 - **삽질 1 — ES 클라이언트/서버 버전 불일치**: Boot 4.1.1이 관리하는 `co.elastic.clients:elasticsearch-java`가 9.4.5로 고정되어 있는데, 처음 띄운 서버는 8.15.0이었습니다. 결국 서버도 9.4.5로 맞춰서 해결 — Boot 버전을 올릴 때마다 ES 클라이언트 버전이 따라 바뀔 수 있으니, 서버 이미지 태그도 같이 확인할 것.
 - **삽질 2 — 색인은 되는데 `_source`에 `embedding` 필드가 안 보임**: Java 클라이언트(bulk/단건 모두)는 물론 순수 `curl`/Python `urllib`로 직접 색인해도 이 ES 9.4.5 이미지에서는 `dense_vector` 필드가 `_source` 조회에 항상 빠졌습니다(`index`/`_source.mode` 설정을 바꿔봐도 동일) — 클라이언트 버그가 아니라 서버 쪽 동작이었습니다. 원인을 더 파기 전에 실제로 필요한지부터 따져보니: 임베딩은 색인 시점에 벡터 인덱스 구조에 넣기 위해서만 필요하고, 검색 시점엔 매번 쿼리 텍스트를 새로 임베딩해서 비교하는 것이지 저장된 벡터를 다시 읽어올 일이 없었습니다. 즉 실제 기능에는 영향이 없는 곁가지였고, 색인/검색이 실제로 잘 동작하는지(dims 불일치 시 400 에러, kNN 검색 결과가 맞는지)로 검증 기준을 바꿔서 통과를 확인했습니다.
 - 검증 완료(2026-08-26, 전부 실제 로컬 인프라로 확인): 관리자가 PDF 업로드 → Kafka `document.uploaded` 소비 → PDFBox 텍스트 추출 → 청크 생성 → Ollama 임베딩 → ES 색인까지 로그로 확인 → 영어 쿼리("How many days of annual leave...")로 검색 시 올바른 청크가 반환(BM25+kNN 둘 다 1위로 잡아 RRF 점수 최고) → **한국어 쿼리("연차는 몇일인가요")로도 같은 영문 문서를 찾아냄** — 텍스트에 겹치는 단어가 전혀 없어 BM25는 못 잡고 벡터 검색만으로 찾은 것으로, 진짜 의미 기반 검색이 되는지 확인한 포인트. 다른 회사(companyId) 것처럼 조회하면 빈 배열(테넌트 격리), `X-Internal-Token` 누락/오류 시 400/403, 문서 삭제 시 청크도 즉시 제거, HWP 업로드는 색인만 건너뛰고 서비스는 안 죽음 — 전부 확인.
+
+## chat-service 참고
+
+- 포트 8085. 자기 전용 DB(`gyubot_chat`)를 씀 — `chat_session`/`chat_message`/`answer_source` 3개 테이블(pptx 데이터모델의 "AI 대화 이력" 도메인 그대로). auth-service가 발급한 JWT를 검증만 하며, `/api/chat/**`는 임직원·관리자 구분 없이 로그인만 하면 됩니다(AI 질의는 두 역할 다 쓰는 기능).
+- API: `POST /api/chat/messages`(질문 하나를 보내고 답변+근거를 받음 — `sessionId`가 없으면 새 대화방을 만듦) · `GET /api/chat/sessions`(질의 이력 목록) · `GET /api/chat/sessions/{id}/messages`(대화방 하나의 전체 메시지+근거).
+- **LLM 결정**: 임베딩과 마찬가지로 OpenAI/Anthropic API 키가 아직 없어서, 로컬 Ollama + `qwen2.5:7b`(한국어 응답이 괜찮은 모델, 무료)로 답변을 생성합니다. `llm/ChatClient` 인터페이스 뒤에 `OllamaChatClient` 구현체 하나만 두는 구조라, 나중에 API 키가 생기면 search-service의 `EmbeddingClient`와 똑같은 방식으로 구현체만 하나 더 추가하면 됩니다.
+- **RAG 흐름**(`ChatService.ask()`): 사용자 메시지 저장 → `client/SearchServiceClient`로 search-service의 `/internal/search`를 호출해 관련 청크 상위 5개를 가져옴 → 청크들을 "이 내용만 근거로 답하고, 없으면 모른다고 하라"는 시스템 프롬프트에 넣어 Ollama에 전달 → 답변을 어시스턴트 메시지로 저장 → 검색 결과 각각을 `answer_source`로 저장해 REQ-F-007(근거 표시)을 충족. 검색 결과가 아예 없으면 LLM을 호출하지 않고 고정 안내 문구를 반환합니다.
+- **대화방 소유권 검증**: `sessionId`로 특정 대화방에 메시지를 보내거나 이력을 조회할 때, 그 대화방이 요청자 본인 것(companyId+userId 일치)인지 확인합니다. 다른 사람 것이면 403이 아니라 **404로 존재 자체를 숨깁니다** — 다른 회사/다른 직원의 대화방이 있는지 없는지조차 알려주지 않기 위함(테넌트 격리, REQ-F-018).
+- 검증 완료(2026-08-26, 전부 실제 인프라로 확인): 직원 계정으로 "연차 휴가는 며칠까지 쓸 수 있고, 신청은 언제까지 해야 해?" 질문 → search-service에서 올바른 청크를 찾아 근거로 제시하며 정확한 한국어 답변 생성 → 같은 세션에서 "이월은 며칠까지 가능해?" 후속 질문도 문맥 없이(매 요청이 검색부터 새로 하는 구조라 이전 대화 맥락은 없음, 검색 자체가 매번 관련 규정을 다시 찾아줌) 정확히 답변 → 질의 이력 목록/상세 조회 확인 → 인증 없이 호출 시 403 → 다른 사용자(관리자)가 남의 대화방 조회 시 404 → 색인된 문서와 무관한 질문("화성 여행 경비는 얼마나 지원돼?")에는 근거 문서에 없다며 **지어내지 않고 답변을 거절** — 환각 방지가 실제로 동작하는 것까지 확인.
 
 ## 가입 승인 플로우 (예외 가입)
 
