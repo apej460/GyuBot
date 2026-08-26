@@ -11,6 +11,11 @@ spring:
       value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
       properties:
         spring.json.trusted.packages: com.gyubot.search.event
+        # document-service가 보내는 이벤트는 com.gyubot.document.event.DocumentEvent 타입 헤더를 달고
+        # 오는데, 여기 클래스패스엔 그 클래스가 없다. 타입 헤더를 무시하고 이 서비스의 동일한
+        # 필드를 가진 DocumentEvent로 바로 매핑한다.
+        spring.json.use.type.headers: false
+        spring.json.value.default.type: com.gyubot.search.event.DocumentEvent
 
 server:
   port: 8084
@@ -30,9 +35,16 @@ eureka:
       defaultZone: ${EUREKA_URL:http://localhost:8761/eureka/}
 
 app:
+  internal:
+    # 서비스 간 내부 API 보호용 공유 시크릿. 다른 서비스와 반드시 같은 값이어야 함.
+    token: ${INTERNAL_API_TOKEN:change-this-internal-token}
   kafka:
     document-uploaded-topic: ${DOCUMENT_UPLOADED_TOPIC:document.uploaded}
     document-deleted-topic: ${DOCUMENT_DELETED_TOPIC:document.deleted}
   elasticsearch:
     # 하이브리드(벡터+키워드) 검색 대상 색인. dense_vector + BM25 필드를 함께 갖는 매핑을 이 인덱스에 만든다.
     document-chunk-index: ${DOCUMENT_CHUNK_INDEX:document-chunks}
+  embedding:
+    ollama:
+      base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
+      model: ${OLLAMA_EMBEDDING_MODEL:nomic-embed-text}
