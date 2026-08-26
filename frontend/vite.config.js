@@ -17,17 +17,10 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      // 각 서비스로 직접 프록시. api-gateway 라우팅이 갖춰지면 하나의 타겟으로 합치면 됨.
-      '/api/auth': {
-        target: 'http://localhost:8081',
-        changeOrigin: true,
-      },
-      '/api/users': {
-        target: 'http://localhost:8082',
-        changeOrigin: true,
-      },
-      '/api/chat': {
-        target: 'http://localhost:8085',
+      // api-gateway 하나로만 프록시한다. 실제 서비스별 라우팅은 게이트웨이(:8080)의
+      // application.yml이 담당 — 프론트는 각 서비스 포트를 몰라도 된다.
+      '/api': {
+        target: 'http://localhost:8080',
         changeOrigin: true,
       },
     },
