@@ -1,0 +1,40 @@
+spring:
+  application:
+    name: chat-service
+  datasource:
+    url: ${DB_URL:jdbc:mariadb://localhost:3306/gyubot_chat}
+    username: ${DB_USER:root}
+    password: ${DB_PASSWORD:root}
+    driver-class-name: org.mariadb.jdbc.Driver
+  sql:
+    init:
+      mode: always
+
+server:
+  port: 8085
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_URL:http://localhost:8761/eureka/}
+
+# auth-service가 발급한 JWT를 검증만 하기 위한 값 (토큰 발급은 하지 않음).
+app:
+  jwt:
+    secret: ${JWT_SECRET:change-this-development-secret-key-at-least-32-characters}
+    issuer: ${JWT_ISSUER:gyubot-auth-service}
+  internal:
+    token: ${INTERNAL_API_TOKEN:change-this-internal-token}
+  llm:
+    ollama:
+      base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
+      model: ${OLLAMA_CHAT_MODEL:qwen2.5:7b}
