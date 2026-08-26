@@ -18,8 +18,8 @@ import java.util.Optional;
 public class JdbcSignupRequestRepository implements SignupRequestRepository {
 
     private static final String SELECT_COLUMNS =
-            "id, company_id, email, name, password, attachment_filename, attachment_content_type, "
-                    + "attachment_path, status, reject_reason";
+            "id, company_id, email, name, company_name, department, position, password, "
+                    + "attachment_filename, attachment_content_type, attachment_path, status, reject_reason";
 
     private final JdbcTemplate jdbcTemplate;
 
@@ -60,30 +60,37 @@ public class JdbcSignupRequestRepository implements SignupRequestRepository {
             Long companyId,
             String email,
             String name,
+            String companyName,
+            String department,
+            String position,
             String encodedPassword,
             String attachmentFilename,
             String attachmentContentType,
             String attachmentPath) {
 
         String sql = "INSERT INTO signup_request"
-                + "(company_id, email, name, password, attachment_filename, attachment_content_type, attachment_path) "
-                + "VALUES (?, ?, ?, ?, ?, ?, ?)";
+                + "(company_id, email, name, company_name, department, position, password, "
+                + "attachment_filename, attachment_content_type, attachment_path) "
+                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
         KeyHolder keyHolder = new GeneratedKeyHolder();
         jdbcTemplate.update(connection -> {
             PreparedStatement ps = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
             ps.setLong(1, companyId);
             ps.setString(2, email);
             ps.setString(3, name);
-            ps.setString(4, encodedPassword);
-            ps.setString(5, attachmentFilename);
-            ps.setString(6, attachmentContentType);
-            ps.setString(7, attachmentPath);
+            ps.setString(4, companyName);
+            ps.setString(5, department);
+            ps.setString(6, position);
+            ps.setString(7, encodedPassword);
+            ps.setString(8, attachmentFilename);
+            ps.setString(9, attachmentContentType);
+            ps.setString(10, attachmentPath);
             return ps;
         }, keyHolder);
         Number key = keyHolder.getKey();
         return new SignupRequest(
                 key == null ? null : key.longValue(),
-                companyId, email, name, encodedPassword,
+                companyId, email, name, companyName, department, position, encodedPassword,
                 attachmentFilename, attachmentContentType, attachmentPath,
                 SignupStatus.PENDING, null);
     }
@@ -110,6 +117,9 @@ public class JdbcSignupRequestRepository implements SignupRequestRepository {
                 rs.getLong("company_id"),
                 rs.getString("email"),
                 rs.getString("name"),
+                rs.getString("company_name"),
+                rs.getString("department"),
+                rs.getString("position"),
                 rs.getString("password"),
                 rs.getString("attachment_filename"),
                 rs.getString("attachment_content_type"),

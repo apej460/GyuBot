@@ -5,6 +5,8 @@ public record MemberProfile(
         Long companyId,
         String email,
         String name,
+        String department,
+        String position,
         Role role,
         MemberStatus status
 ) {

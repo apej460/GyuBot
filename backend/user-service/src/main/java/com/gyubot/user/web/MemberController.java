@@ -5,6 +5,7 @@ import com.gyubot.user.security.AuthPrincipal;
 import com.gyubot.user.service.MemberService;
 import com.gyubot.user.web.dto.ChangePasswordRequest;
 import com.gyubot.user.web.dto.MemberResponse;
+import com.gyubot.user.web.dto.MemberStatsResponse;
 import com.gyubot.user.web.dto.UpdateStatusRequest;
 import jakarta.validation.Valid;
 import org.springframework.security.core.Authentication;
@@ -56,6 +57,14 @@ public class MemberController {
         return memberService.findAllInCompany(principalOf(authentication).companyId()).stream()
                 .map(MemberResponse::from)
                 .toList();
+    }
+
+    /*
+     * 관리자 - 운영 대시보드용 회원 수 (본인 회사 소속만)
+     */
+    @GetMapping("/stats")
+    public MemberStatsResponse stats(Authentication authentication) {
+        return new MemberStatsResponse(memberService.countInCompany(principalOf(authentication).companyId()));
     }
 
     /*

@@ -14,7 +14,13 @@ public interface MemberProfileRepository {
 
     List<MemberProfile> findAllByCompanyId(Long companyId);
 
+    List<MemberProfile> findByCompanyIdAndRoles(Long companyId, List<Role> roles);
+
+    List<MemberProfile> findByRoles(List<Role> roles);
+
     void updateStatus(Long id, MemberStatus status);
 
-    void insert(Long id, Long companyId, String email, String name, Role role, MemberStatus status);
+    void insert(
+            Long id, Long companyId, String email, String name, String department, String position,
+            Role role, MemberStatus status);
 }

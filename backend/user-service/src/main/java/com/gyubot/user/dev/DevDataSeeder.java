@@ -29,19 +29,21 @@ public class DevDataSeeder implements CommandLineRunner {
 
     @Override
     public void run(String... args) {
-        seed(1L, 1L, "employee@gyubot.local", "테스트 임직원", Role.EMPLOYEE);
-        seed(2L, 1L, "admin@gyubot.local", "테스트 관리자", Role.ADMIN);
+        seed(1L, 1L, "employee@gyubot.local", "테스트 임직원", "경영지원팀", "대리", Role.EMPLOYEE);
+        seed(2L, 1L, "admin@gyubot.local", "테스트 관리자", "IT팀", "팀장", Role.ADMIN);
+        seed(3L, 1L, "superadmin@gyubot.local", "테스트 최고관리자", "IT팀", "부장", Role.SUPER_ADMIN);
     }
 
-    private void seed(Long id, Long companyId, String email, String name, Role role) {
+    private void seed(Long id, Long companyId, String email, String name, String department, String position, Role role) {
         Integer count = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM member_profile WHERE id = ?", Integer.class, id);
         if (count != null && count > 0) {
             return;
         }
         jdbcTemplate.update(
-                "INSERT INTO member_profile(id, company_id, email, name, role, status) VALUES (?, ?, ?, ?, ?, ?)",
-                id, companyId, email, name, role.name(), MemberStatus.ACTIVE.name());
+                "INSERT INTO member_profile(id, company_id, email, name, department, position, role, status) "
+                        + "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                id, companyId, email, name, department, position, role.name(), MemberStatus.ACTIVE.name());
         log.info("[dev-seed] {} 프로필 생성: {} ({})", role, email, id);
     }
 }

@@ -28,6 +28,11 @@ public class MemberService {
         return memberProfileRepository.findAllByCompanyId(companyId);
     }
 
+    @Transactional(readOnly = true)
+    public int countInCompany(Long companyId) {
+        return memberProfileRepository.findAllByCompanyId(companyId).size();
+    }
+
     @Transactional
     public void updateStatus(Long id, MemberStatus status) {
         requireById(id);

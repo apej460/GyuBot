@@ -39,9 +39,13 @@ public class SignupController {
     public SignupRequestResponse submit(
             @RequestParam String email,
             @RequestParam String name,
+            @RequestParam(required = false) String companyName,
+            @RequestParam(required = false) String department,
+            @RequestParam(required = false) String position,
             @RequestParam String password,
             @RequestParam("attachment") MultipartFile attachment) {
-        return SignupRequestResponse.from(signupService.submit(email, name, password, attachment));
+        return SignupRequestResponse.from(
+                signupService.submit(email, name, companyName, department, position, password, attachment));
     }
 
     /*

@@ -55,7 +55,9 @@ public class SignupService {
     }
 
     @Transactional
-    public SignupRequest submit(String email, String name, String rawPassword, MultipartFile attachment) {
+    public SignupRequest submit(
+            String email, String name, String companyName, String department, String position,
+            String rawPassword, MultipartFile attachment) {
         validateAttachment(attachment);
         if (memberProfileRepository.findByEmail(email).isPresent()) {
             throw new DuplicateEmailException();
@@ -68,7 +70,7 @@ public class SignupService {
         String encodedPassword = passwordEncoder.encode(rawPassword);
 
         return signupRequestRepository.save(
-                DEFAULT_COMPANY_ID, email, name, encodedPassword,
+                DEFAULT_COMPANY_ID, email, name, companyName, department, position, encodedPassword,
                 stored.originalFilename(), attachment.getContentType(), stored.storedPath());
     }
 
@@ -94,9 +96,10 @@ public class SignupService {
         }
 
         Long newUserId = authServiceClient.createUser(
-                request.companyId(), request.email(), request.encodedPassword(), request.name());
+                request.companyId(), request.email(), request.encodedPassword(), request.name(), "EMPLOYEE");
         memberProfileRepository.insert(
-                newUserId, request.companyId(), request.email(), request.name(), Role.EMPLOYEE, MemberStatus.ACTIVE);
+                newUserId, request.companyId(), request.email(), request.name(),
+                request.department(), request.position(), Role.EMPLOYEE, MemberStatus.ACTIVE);
         signupRequestRepository.approve(id);
 
         sendMail(request.email(), "[GyuBot] 가입이 승인되었습니다", "가입 신청이 승인되었습니다. 이메일과 비밀번호로 로그인해주세요.");

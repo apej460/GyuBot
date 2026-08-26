@@ -1,7 +1,9 @@
 package com.gyubot.user.client;
 
 import com.gyubot.user.exception.DuplicateEmailException;
+import com.gyubot.user.exception.OtpVerificationFailedException;
 import com.gyubot.user.exception.PasswordChangeException;
+import com.gyubot.user.exception.UnregisteredDomainException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cloud.client.ServiceInstance;
 import org.springframework.cloud.client.discovery.DiscoveryClient;
@@ -53,22 +55,70 @@ public class AuthServiceClient {
     }
 
     /*
+     * 일반 가입(회사 이메일 도메인 인증)에서 이메일 소유 확인용 OTP를 auth-service에 위임한다 —
+     * auth-service가 이미 갖춘 Redis+메일 인프라를 그대로 재사용(중복 구현 방지).
+     */
+    public void issueOtp(String email, String purpose) {
+        String baseUrl = resolveBaseUrl();
+        restClient.post()
+                .uri(baseUrl + "/internal/otp/issue")
+                .header("X-Internal-Token", internalToken)
+                .body(new OtpIssuePayload(email, purpose))
+                .retrieve()
+                .toBodilessEntity();
+    }
+
+    public void verifyOtp(String email, String code, String purpose) {
+        String baseUrl = resolveBaseUrl();
+        try {
+            restClient.post()
+                    .uri(baseUrl + "/internal/otp/verify")
+                    .header("X-Internal-Token", internalToken)
+                    .body(new OtpVerifyPayload(email, code, purpose))
+                    .retrieve()
+                    .toBodilessEntity();
+        } catch (HttpClientErrorException.Unauthorized e) {
+            throw new OtpVerificationFailedException();
+        }
+    }
+
+    /*
      * 가입 승인 시 auth-service에 실제 로그인 계정을 만든다. encodedPassword는 가입 신청
      * 접수 시점에 이미 해시된 값이라 auth-service는 이를 재해시하지 않고 그대로 저장한다.
      */
-    public Long createUser(Long companyId, String email, String encodedPassword, String name) {
+    public Long createUser(Long companyId, String email, String encodedPassword, String name, String role) {
         String baseUrl = resolveBaseUrl();
         try {
             CreateUserResponse response = restClient.post()
                     .uri(baseUrl + "/internal/auth-users")
                     .header("X-Internal-Token", internalToken)
-                    .body(new CreateUserPayload(companyId, email, encodedPassword, name, "EMPLOYEE"))
+                    .body(new CreateUserPayload(companyId, email, encodedPassword, name, role))
                     .retrieve()
                     .body(CreateUserResponse.class);
             return response.id();
         } catch (HttpClientErrorException.Conflict e) {
             throw new DuplicateEmailException();
         }
+    }
+
+    /*
+     * 이메일 도메인으로 등록된 회사를 찾는다. auth-service의 시스템 관리(회사 등록) 화면에서
+     * 관리하는 목록을 그대로 조회하므로, 여기서 도메인 화이트리스트를 따로 들고 있지 않는다.
+     */
+    public CompanyInfo resolveCompanyByEmail(String email) {
+        String baseUrl = resolveBaseUrl();
+        try {
+            return restClient.get()
+                    .uri(baseUrl + "/internal/companies/resolve?email={email}", email)
+                    .header("X-Internal-Token", internalToken)
+                    .retrieve()
+                    .body(CompanyInfo.class);
+        } catch (HttpClientErrorException.BadRequest e) {
+            throw new UnregisteredDomainException();
+        }
+    }
+
+    public record CompanyInfo(Long id, String name, String emailDomain, String tenantCode, String status) {
     }
 
     private String resolveBaseUrl() {
@@ -80,6 +130,12 @@ public class AuthServiceClient {
     }
 
     private record ChangePasswordPayload(String currentPassword, String newPassword) {
+    }
+
+    private record OtpIssuePayload(String email, String purpose) {
+    }
+
+    private record OtpVerifyPayload(String email, String code, String purpose) {
     }
 
     private record CreateUserPayload(Long companyId, String email, String encodedPassword, String name, String role) {
