@@ -24,24 +24,28 @@ GyuBot/
 ## 로컬 실행
 
 ```bash
-# 0. 인프라 먼저 기동 (MariaDB, Redis, Mailpit, Kafka, MinIO, Elasticsearch, Ollama)
-cd infra && docker compose up -d
-
-# 1. Eureka
-cd backend/discovery-service && ./gradlew bootRun
-
-# 2. API Gateway
-cd backend/api-gateway && ./gradlew bootRun
-
-# 3. Auth Service
-cd backend/auth-service && ./gradlew bootRun
-
-# 4. 프론트엔드
-cd frontend && npm install && npm run dev
+./scripts/run-all.sh   # infra -> 백엔드 7개(순차, 헬스체크 통과 후 다음 기동) -> 프론트엔드
+./scripts/stop-all.sh  # 백엔드 7개 + 프론트엔드 중지 (infra 컨테이너는 유지)
+./scripts/stop-all.sh --infra  # infra 컨테이너까지 함께 종료
 ```
+
+각 서비스 로그는 `logs/<service-name>.log`에 쌓입니다. `run-all.sh`는 discovery-service부터 순서대로 띄우면서 매 서비스가 뜬 걸 확인(헬스체크)한 뒤 다음 서비스를 올립니다 — 위 "Eureka가 죽으면 나머지도 재기동" 문제를 피하려면 이 순서를 지키는 게 중요합니다.
 
 Eureka 대시보드: http://localhost:8761
 Mailpit(수신 메일 확인용 SMTP 캐처): http://localhost:8025
+
+수동으로 하나씩 띄우고 싶을 때(디버깅 등):
+```bash
+cd infra && docker compose up -d
+cd backend/discovery-service && ./gradlew bootRun   # 1
+cd backend/api-gateway && ./gradlew bootRun          # 2
+cd backend/auth-service && ./gradlew bootRun         # 3
+cd backend/user-service && ./gradlew bootRun         # 4
+cd backend/document-service && ./gradlew bootRun     # 5
+cd backend/search-service && ./gradlew bootRun       # 6
+cd backend/chat-service && ./gradlew bootRun         # 7
+cd frontend && npm install && npm run dev            # 8
+```
 
 **Eureka(discovery-service)가 죽으면 나머지 서비스도 다시 띄워야 합니다.** 각 서비스의 Eureka 클라이언트는 등록/하트비트가 반복 실패하면 재시도를 포기하고, discovery-service가 다시 떠도 스스로 재등록하지 않습니다(장시간 로컬 개발 세션에서 메모리 압박 등으로 discovery-service만 죽는 경우가 실제로 있었음). `curl http://localhost:8761/eureka/apps`로 등록된 인스턴스 수를 확인해 6개(gateway/auth/user/document/search/chat) 미만이면, discovery-service를 먼저 올리고 나머지도 전부 재기동할 것 — 일부만 재기동하면 그 서비스만 복구되고 나머지는 계속 "Connection refused"로 실패합니다.
 

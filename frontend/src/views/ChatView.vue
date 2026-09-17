@@ -60,6 +60,15 @@ async function openCitation(source) {
 function statusLabel(status) {
   return status === 'UPCOMING' ? '시행 예정' : '사용 중'
 }
+
+// search-service가 인용 근거에서 실제로 매칭된 부분을 표시하려고 스니펫에 ...로 감싸
+// 심어 보내는 마커를 <mark>로 바꾼다. 반드시 먼저 HTML 이스케이프한 뒤에 마커만 태그로 치환해야
+// 문서 원문에 <, > 같은 문자가 있어도 v-html로 그대로 삽입되지 않는다(XSS 방지).
+function highlightHtml(text) {
+  if (!text) return ''
+  const escaped = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  return escaped.split('\u0001').join('<mark>').split('\u0002').join('</mark>')
+}
 </script>
 
 <template>
@@ -103,7 +112,7 @@ function statusLabel(status) {
               @click="openCitation(source)"
             >
               <span class="source-file">{{ source.originalFilename }}</span>
-              <span class="source-snippet">{{ source.snippet }}</span>
+              <span class="source-snippet" v-html="highlightHtml(source.snippet)" />
             </button>
           </div>
         </div>
@@ -148,7 +157,7 @@ function statusLabel(status) {
         </el-descriptions>
 
         <p class="drawer-excerpt-title">발췌 내용</p>
-        <p class="drawer-excerpt">{{ drawerSnippet }}</p>
+        <p class="drawer-excerpt" v-html="highlightHtml(drawerSnippet)" />
 
         <el-button
           type="primary"
@@ -275,6 +284,13 @@ function statusLabel(status) {
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+.source-snippet :deep(mark),
+.drawer-excerpt :deep(mark) {
+  background: #fdf1c7;
+  color: #b88230;
+  border-radius: 2px;
+  padding: 0 2px;
 }
 .thinking {
   align-self: flex-start;

@@ -23,6 +23,13 @@ public class ChatService {
     private static final int TOP_K = 5;
     private static final int TITLE_MAX_LENGTH = 40;
 
+    // search-service의 HybridSearchService가 인용 하이라이트를 표시하려고 청크 텍스트에 심어 보내는
+    // 마커. answer_source.snippet에는 그대로 저장해 프론트가 <mark>로 바꿔 쓰지만, LLM 프롬프트에는
+    // 불필요한 제어 문자를 보낼 이유가 없어 여기서만 제거한다. 두 서비스가 이 문자에 대해 암묵적으로
+    // 합의하고 있으므로, search-service의 HybridSearchService.HIGHLIGHT_START/END를 바꾸면 여기도 같이 바꿔야 한다.
+    private static final String HIGHLIGHT_START = "\u0001";
+    private static final String HIGHLIGHT_END = "\u0002";
+
     private final ChatSessionRepository sessionRepository;
     private final ChatMessageRepository messageRepository;
     private final AnswerSourceRepository answerSourceRepository;
@@ -87,9 +94,13 @@ public class ChatService {
         sb.append("당신은 사내 규정을 안내하는 챗봇입니다. 아래 [참고 문서]에 있는 내용만 근거로 한국어로 답변하세요. ")
                 .append("참고 문서에 없는 내용은 추측하거나 지어내지 말고, 답을 찾을 수 없으면 모른다고 답하세요.\n\n[참고 문서]\n");
         for (SearchResultDto r : results) {
-            sb.append("- (").append(r.originalFilename()).append(") ").append(r.text()).append('\n');
+            sb.append("- (").append(r.originalFilename()).append(") ").append(stripHighlightMarkers(r.text())).append('\n');
         }
         return sb.toString();
+    }
+
+    private String stripHighlightMarkers(String text) {
+        return text.replace(HIGHLIGHT_START, "").replace(HIGHLIGHT_END, "");
     }
 
     private String titleFrom(String question) {
