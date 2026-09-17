@@ -23,16 +23,34 @@ GyuBot/
 
 ## 로컬 실행
 
+### 사전 요구사항 (Prerequisites)
+- **Docker & Docker Compose**
+- **Java 21+** (프로젝트 내 `./gradlew` 포함)
+- **Node.js 18+** & npm
+
+### 실행 및 종료
 ```bash
 ./scripts/run-all.sh   # infra -> 백엔드 7개(순차, 헬스체크 통과 후 다음 기동) -> 프론트엔드
 ./scripts/stop-all.sh  # 백엔드 7개 + 프론트엔드 중지 (infra 컨테이너는 유지)
 ./scripts/stop-all.sh --infra  # infra 컨테이너까지 함께 종료
 ```
 
-각 서비스 로그는 `logs/<service-name>.log`에 쌓입니다. `run-all.sh`는 discovery-service부터 순서대로 띄우면서 매 서비스가 뜬 걸 확인(헬스체크)한 뒤 다음 서비스를 올립니다 — 위 "Eureka가 죽으면 나머지도 재기동" 문제를 피하려면 이 순서를 지키는 게 중요합니다.
+> **최초 실행 시 (1회 필요)**:  
+> Ollama 컨테이너가 뜬 후 임베딩 및 LLM 모델을 받아두어야 합니다:
+> ```bash
+> docker exec gyubot-ollama ollama pull nomic-embed-text   # 임베딩용 (약 274MB)
+> docker exec gyubot-ollama ollama pull qwen2.5:7b          # 답변 생성용 (약 4.7GB)
+> ```
 
-Eureka 대시보드: http://localhost:8761
-Mailpit(수신 메일 확인용 SMTP 캐처): http://localhost:8025
+### 접속 URL & 테스트 계정
+* **웹 서비스 (프론트엔드)**: http://localhost:5173
+  * **임직원 계정**: `employee@gyubot.local` / `Passw0rd!` (즉시 로그인)
+  * **관리자 계정**: `admin@gyubot.local` / `Passw0rd!` (`/admin/login` 접속 → Mailpit에서 OTP 확인)
+* **Eureka 서비스 대시보드**: http://localhost:8761
+* **Mailpit (이메일/OTP 수신함 웹 UI)**: http://localhost:8025
+* **MinIO 콘솔**: http://localhost:9101 (`minioadmin` / `minioadmin`)
+
+각 서비스 로그는 `logs/<service-name>.log`에 쌓입니다. `run-all.sh`는 discovery-service부터 순서대로 띄우면서 매 서비스가 뜬 걸 확인(헬스체크)한 뒤 다음 서비스를 올립니다 — Eureka 등록 순서를 보장하기 위함입니다.
 
 수동으로 하나씩 띄우고 싶을 때(디버깅 등):
 ```bash
